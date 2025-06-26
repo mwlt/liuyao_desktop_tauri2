@@ -1,0 +1,100 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Proxy Development Best Practices
+
+## Core Principles
+
+### 1. Minimal Intervention
+Only modify or handle specific requests when absolutely necessary.
+```rust
+// ✅ DO: Handle specific request types
+if is_multipart {
+    handle_multipart_request();
+}
+
+// ❌ DON'T: Modify all responses
+modify_all_responses();
+```
+
+### 2. Layer Responsibility
+Proxy layer should focus on data transmission, not application logic.
+```rust
+// ✅ DO: Focus on proxy responsibilities
+handle_data_transmission();
+track_progress();
+
+// ❌ DON'T: Fix application issues in proxy
+modify_response_for_frontend();
+```
+
+### 3. Progressive Enhancement
+Add features without breaking existing functionality.
+```rust
+// ✅ DO: Add enhancements safely
+if let Some(content_length) = get_content_length() {
+    track_upload_progress(content_length);
+}
+
+// ❌ DON'T: Make breaking changes
+force_modify_all_headers();
+```
+
+### 4. Logging and Monitoring
+Provide comprehensive logging for debugging.
+```rust
+// ✅ DO: Log with context
+println!("[proxy] Upload progress: {}% ({}/{})", progress, sent, total);
+
+// ❌ DON'T: Use vague messages
+println!("Error occurred");
+```
+
+### 5. Error Handling
+Handle errors gracefully with proper context.
+```rust
+// ✅ DO: Specific error handling
+if let Err(e) = stream.write_all(&buffer) {
+    println!("[proxy] Send failed: {}", e);
+    handle_error();
+}
+
+// ❌ DON'T: Generic error handling
+if error { break; }
+```
+
+## Implementation Guidelines
+
+1. Data Transmission
+   - Use appropriate buffer sizes
+   - Implement progress tracking
+   - Maintain data integrity
+
+2. Request Processing
+   - Identify request types accurately
+   - Preserve original headers
+   - Handle special cases explicitly
+
+3. Response Handling
+   - Keep original response structure
+   - Ensure complete data transfer
+   - Maintain protocol compliance
+
+## Common Pitfalls to Avoid
+
+1. Modifying response structure unnecessarily
+2. Mixing application and proxy layer concerns
+3. Insufficient error logging
+4. Breaking protocol specifications
+5. Ignoring performance implications
+
+## Best Practices
+
+1. Always maintain proxy transparency
+2. Log meaningful debug information
+3. Handle resources efficiently
+4. Keep code simple and maintainable
+
+5. Focus on core proxy responsibilities
