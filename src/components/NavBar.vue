@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 19:20:01
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-25 22:14:54
+ * @LastEditTime: 2025-06-27 00:31:59
  * @FilePath: \liuyao_desktop_tauri\src\components\NavBar.vue
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 -->
@@ -58,7 +58,7 @@
         <span class="proxy-badge" :class="proxyStatusClass">{{ proxyStatusText }}</span>
       </div>
     </div>
-    <n-checkbox>sdfsdfdsf</n-checkbox>
+    
     
     <div class="nav-actions">
       <!-- 代理设置弹出框 -->
@@ -72,6 +72,7 @@
           <n-button 
             size="small" 
             text
+            class="nav-button"
             :class="{ 'proxy-active': isProxyActive }"
           >
             <template #icon>
@@ -96,14 +97,17 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { NPopover, NButton, NCheckbox } from 'naive-ui';
 import { useProxyStore } from '../store/useProxyStore';
 import ProxySettingsPopover from './ProxySettingsPopover.vue';
-// import { open } from '@tauri-apps/plugin-shell';
- 
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-shell';
 
-// 临时使用 window.open 替代
-const openInDefaultBrowser = () => {
-  window.open('http://www.core333.com', '_blank');
+// 在系统默认浏览器中打开
+const openInDefaultBrowser = async () => {
+  try {
+    await open('http://www.core333.com');
+  } catch (error) {
+    console.error('打开浏览器失败:', error);
+  }
 };
-
 
 interface NetworkStatus {
   isOnline: boolean;
@@ -130,21 +134,13 @@ const networkStatus = ref<NetworkStatus>({
   responseTime: 0,
 });
 
-
-// const props = defineProps<{ networkStatus: any }>();
- 
 const proxyStore = useProxyStore();
-
-// 在默认浏览器中打开网站函数已在上面定义
 
 // 刷新页面
 const refreshPage = () => {
   window.location.reload();
 };
 
- 
- 
- 
 // 网络状态相关
 const networkStatusClass = computed(() => {
   if (!networkStatus.value) return 'status-unknown';
@@ -184,7 +180,6 @@ const isProxyActive = computed(() => {
   return proxyStore.config.type !== 'none';
 });
 
- 
 </script>
 
 <style scoped>

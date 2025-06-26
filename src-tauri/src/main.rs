@@ -70,14 +70,11 @@ pub fn run() {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
                 
-                // 设置窗口置顶（暂时）
-                let _ = window.set_always_on_top(true);
-                
                 // 居中窗口
                 let _ = window.center();
                 
-                // 设置窗口大小
-                let _ = window.set_size(tauri::LogicalSize::new(1000, 700));
+                // 设置窗口置顶（暂时）
+                let _ = window.set_always_on_top(true);
                 
                 println!("✅ 主窗口已强制显示、置顶、居中并获得焦点");
                 

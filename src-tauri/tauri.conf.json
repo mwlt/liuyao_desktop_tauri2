@@ -1,5 +1,5 @@
 {
-  "productName": "liuyao_desktop_tauri",
+  "productName": "六爻排盘与研究 v2.6.0",
   "version": "0.1.0",
   "identifier": "com.liuyao_desktop_tauri.app",
   "build": {
@@ -12,9 +12,11 @@
     "windows": [
       {
         "title": "六爻排盘与研究",
-        "width": 800,
-        "height": 600,
-        "label": "main",
+        "width": 1600,
+        "height": 1200,
+        "label": "main",   
+        "resizable":true,
+        "theme":"Dark",
         "proxyUrl": "http://127.0.0.1:8080"
       }
     ],
