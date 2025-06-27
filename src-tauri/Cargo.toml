@@ -24,11 +24,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.36.0", features = ["full"] }
 once_cell = "1.19.0"
-winreg = "0.52.0"
 # 新增：代理相关依赖
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 tokio-socks = "0.5.1"
 url = "2.3.1"
 base64 = "0.22.1"
 reqwest = { version = "0.11", features = ["json"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52.0"
 
