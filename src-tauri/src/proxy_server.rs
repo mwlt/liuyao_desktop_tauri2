@@ -59,7 +59,8 @@ struct SystemProxyConfig {
     http_proxy: Option<String>,
     https_proxy: Option<String>,
     bypass_list: Vec<String>,
-    pac_url: Option<String>,
+    #[allow(dead_code)]  // 允许未使用的字段
+    pac_url: Option<String>,  // 保留用于未来实现 PAC（代理自动配置）功能
 }
 
 impl Default for SystemProxyConfig {
