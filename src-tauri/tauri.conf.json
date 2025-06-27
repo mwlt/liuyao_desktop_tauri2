@@ -1,6 +1,6 @@
 {
   "productName": "六爻排盘与研究",
-  "version": "0.1.0",
+  "version": "2.6.1",
   "identifier": "com.mwlt.liuyao-desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -38,9 +38,16 @@
       "icons/icon.ico"
     ],
     "windows": {
-    "wix": {
-      "language": "zh-CN"  
+      "wix": {
+        "language": "zh-CN"
+      }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/bin/liuyao-desktop": "bin/liuyao-desktop"
+        }
+      }
     }
-  }
   }
 }
