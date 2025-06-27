@@ -93,8 +93,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
-import { NPopover, NButton, NIcon, NCheckbox } from 'naive-ui';
+import { computed } from 'vue';
+import { NPopover, NButton } from 'naive-ui';
 import { useProxyStore } from '../store/useProxyStore';
 import ProxySettingsPopover from './ProxySettingsPopover.vue';
 // import { invoke } from '@tauri-apps/api/core';

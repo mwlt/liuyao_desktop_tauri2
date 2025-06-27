@@ -29,10 +29,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
-import { useProxyStore } from '../store/useProxyStore';
 // import { invoke } from '@tauri-apps/api/core';
-
-const proxyStore = useProxyStore();
 
 // const props = defineProps<{ networkStatus: any }>();
 
