@@ -1,7 +1,7 @@
 {
-  "productName": "六爻排盘与研究 v2.6.0",
+  "productName": "六爻排盘与研究v2.6.0",
   "version": "0.1.0",
-  "identifier": "com.liuyao_desktop_tauri.app",
+  "identifier": "com.mwlt.liuyao-desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -9,14 +9,17 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "六爻排盘与研究",
+    "windows": [{
+     
+    
+        "title": "六爻排盘与研究 v2.6.0",
         "width": 1600,
         "height": 1200,
+        "minWidth": 1200,
+        "minHeight": 900,
         "label": "main",   
         "resizable":true,
-        "theme":"Dark",
+        "theme":"Light",
         "proxyUrl": "http://127.0.0.1:8080"
       }
     ],
@@ -33,6 +36,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+    "wix": {
+      "language": "zh-CN"  
+    }
+  }
   }
 }
