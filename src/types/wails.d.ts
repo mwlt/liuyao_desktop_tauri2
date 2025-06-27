@@ -18,6 +18,20 @@ export interface ProxyConfig {
   noProxy: string       // 代理例外列表
 }
 
+// 新增：代理设置类型（对应Rust的ProxySettings）
+export interface ProxySettings {
+  proxy_type: ProxyType
+  http_proxy?: string
+  https_proxy?: string
+  socks5_proxy?: string
+  username?: string
+  password?: string
+  enabled: boolean
+}
+
+// 新增：代理类型枚举
+export type ProxyType = 'None' | 'System' | 'Http' | 'Https' | 'Socks5' | 'Manual'
+
 export interface ProxyValidationResult {
   valid: boolean
   message: string
@@ -29,6 +43,16 @@ export interface LegacyProxyConfig {
   type: string
   host: string
   port: string
+}
+
+// 新增：系统代理信息接口
+export interface SystemProxyInfo {
+  http_proxy: string
+  https_proxy: string
+  socks_proxy: string
+  ftp_proxy: string
+  no_proxy: string
+  proxy_enabled: boolean
 }
 
 // Extend Window interface for Wails
@@ -64,4 +88,26 @@ declare global {
       EventsOff: (eventName: string) => void
     }
   }
+}
+
+// 新增：Tauri API类型定义
+declare global {
+  const __TAURI__: {
+    invoke: <T = any>(cmd: string, args?: Record<string, any>) => Promise<T>
+  }
+}
+
+// 新增：Tauri命令类型定义
+export interface TauriCommands {
+  // 系统代理相关
+  get_system_proxy_info: () => Promise<SystemProxyInfo>
+  get_local_proxy_port: () => Promise<number>
+  
+  // 代理设置管理
+  update_proxy_settings: (settings: ProxySettings) => Promise<void>
+  get_proxy_settings: () => Promise<ProxySettings>
+  set_proxy_type: (proxy_type: string) => Promise<void>
+  set_http_proxy: (proxy: string) => Promise<void>
+  set_https_proxy: (proxy: string) => Promise<void>
+  set_socks5_proxy: (proxy: string) => Promise<void>
 } 

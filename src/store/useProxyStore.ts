@@ -1,60 +1,132 @@
 import { defineStore } from 'pinia';
 import { ref, watch, computed, readonly } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import type { ProxyConfig, ProxyValidationResult } from '../types/wails';
+import type { ProxySettings } from '../types/wails';
 
 export type ProxyType = 'none' | 'system' | 'manual';
+
+// 简化的前端代理配置
+interface ProxyConfig {
+  type: ProxyType;
+  httpProxy: string;
+  httpsProxy: string;
+  socksProxy: string;
+}
 
 // 默认配置
 const defaultConfig: ProxyConfig = {
   type: 'none',
-  address: '',
   httpProxy: '',
   httpsProxy: '',
-  socksProxy: '',
-  noProxy: ''
+  socksProxy: ''
 };
+
+interface TestResult {
+  proxy_available: boolean;
+  core333_accessible: boolean;
+  google_accessible: boolean;
+  message: string;
+}
 
 export const useProxyStore = defineStore('proxy', () => {
   const config = ref<ProxyConfig>({ ...defaultConfig });
   const isLoading = ref(false);
   const error = ref<string | null>(null);
   const isInitialized = ref(false);
-  const isSyncing = ref(false);
 
-  // 新增：本地代理端口
+  // 本地代理端口
   const localProxyPort = ref<number | null>(null);
+  
+  // 当前代理设置（来自Rust后端）
+  const currentProxySettings = ref<ProxySettings | null>(null);
+
+  // 获取本地代理端口
   async function initLocalProxyPort(retry = 3) {
-    console.log(`initLocalProxyPort: 开始尝试获取端口，剩余重试次数: ${retry}`);
+    console.log(`[ProxyStore] 获取本地代理端口，剩余重试: ${retry}`);
     
     try {
-      console.log('正在调用 Tauri invoke get_local_proxy_port...');
       const port = await invoke<number>('get_local_proxy_port');
-      console.log('get_local_proxy_port 返回结果:', port, '类型:', typeof port);
+      console.log('[ProxyStore] 获取端口结果:', port);
       
       if (port && port !== 0) {
         localProxyPort.value = port;
-        console.log('✅ 成功获取本地代理端口:', port);
-        return; // 成功获取，直接返回
+        console.log('[ProxyStore] ✅ 本地代理端口:', port);
+        return;
       } else {
-        console.log('⚠️ 获取到的端口无效:', port);
+        console.log('[ProxyStore] ⚠️ 端口无效:', port);
         if (retry > 0) {
-          console.log(`将在500ms后重试，剩余重试次数: ${retry - 1}`);
           setTimeout(() => initLocalProxyPort(retry - 1), 500);
         } else {
-          console.log('❌ 重试次数已用完，设置端口为null');
           localProxyPort.value = null;
         }
       }
     } catch (e) {
-      console.error('❌ get_local_proxy_port 调用错误:', e);
+      console.error('[ProxyStore] ❌ 获取端口失败:', e);
       if (retry > 0) {
-        console.log(`将在500ms后重试，剩余重试次数: ${retry - 1}`);
         setTimeout(() => initLocalProxyPort(retry - 1), 500);
       } else {
-        console.log('❌ 重试次数已用完，设置端口为null');
         localProxyPort.value = null;
       }
+    }
+  }
+
+  // 从后端加载代理设置
+  async function loadProxySettings() {
+    try {
+      isLoading.value = true;
+      error.value = null;
+      
+      const settings = await invoke<ProxySettings>('get_proxy_settings');
+      currentProxySettings.value = settings;
+      
+      // 同步到前端配置
+      syncFromBackendSettings(settings);
+      
+      console.log('[ProxyStore] ✅ 加载代理设置成功:', settings);
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 加载代理设置失败:', e);
+      error.value = `加载代理设置失败: ${e}`;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // 将后端设置同步到前端配置
+  function syncFromBackendSettings(settings: ProxySettings) {
+    // 映射代理类型
+    const typeMap: Record<string, ProxyType> = {
+      'None': 'none',
+      'System': 'system', 
+      'Manual': 'manual',
+      'Http': 'manual',
+      'Https': 'manual',
+      'Socks5': 'manual'
+    };
+    
+    config.value.type = typeMap[settings.proxy_type] || 'none';
+    config.value.httpProxy = settings.http_proxy || '';
+    config.value.httpsProxy = settings.https_proxy || '';
+    config.value.socksProxy = settings.socks5_proxy || '';
+    
+    console.log('[ProxyStore] 同步后端设置到前端:', config.value);
+  }
+
+  // 更新后端代理设置
+  async function updateBackendProxySettings() {
+    try {
+      if (!currentProxySettings.value) {
+        console.warn('[ProxyStore] 没有当前代理设置，跳过更新');
+        return;
+      }
+      
+      isLoading.value = true;
+      await invoke('update_proxy_settings', { settings: currentProxySettings.value });
+      console.log('[ProxyStore] ✅ 后端代理设置更新成功');
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 更新后端代理设置失败:', e);
+      error.value = `更新后端代理设置失败: ${e}`;
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -68,94 +140,226 @@ export const useProxyStore = defineStore('proxy', () => {
   // 监听配置变化，同步到后端
   watch(
     config,
-    async (newConfig, oldConfig) => {
-      if (!isInitialized.value || isSyncing.value) {
+    async (newConfig) => {
+      if (!isInitialized.value) {
         return;
       }
 
-      console.log('代理配置变化:', { old: oldConfig, new: newConfig });
+      console.log('[ProxyStore] 代理配置变化:', newConfig);
 
-      // 同步到后端
-      if (window.go && window.go.main && window.go.main.App && window.go.main.App.UpdateProxyConfig) {
-        try {
-          isLoading.value = true;
-          error.value = null;
-          isSyncing.value = true;
-          
-          await window.go.main.App.UpdateProxyConfig(newConfig);
-          console.log('代理配置已同步到后端:', newConfig);
-        } catch (err) {
-          error.value = `配置同步失败: ${err}`;
-          console.error('代理配置同步失败:', err);
-        } finally {
-          isLoading.value = false;
-          setTimeout(() => {
-            isSyncing.value = false;
-          }, 100);
-        }
+      // 更新当前代理设置
+      if (currentProxySettings.value) {
+        // 映射前端类型到后端类型
+        const backendTypeMap: Record<ProxyType, string> = {
+          'none': 'None',
+          'system': 'System',
+          'manual': 'Manual'
+        };
+        
+        currentProxySettings.value.proxy_type = backendTypeMap[newConfig.type] as any;
+        currentProxySettings.value.http_proxy = newConfig.httpProxy || undefined;
+        currentProxySettings.value.https_proxy = newConfig.httpsProxy || undefined;
+        currentProxySettings.value.socks5_proxy = newConfig.socksProxy || undefined;
+        
+        // 更新后端
+        await updateBackendProxySettings();
       }
     },
     { deep: true }
   );
 
   // 设置代理类型
-  function setType(type: ProxyType) {
-    if (isSyncing.value) return;
+  async function setType(type: ProxyType) {
     config.value.type = type;
-    // 当切换到非手动模式时，不再清除手动配置，以便用户可以轻松切换回来
-    // if (type !== 'manual') {
-    //   config.value.httpProxy = '';
-    //   config.value.httpsProxy = '';
-    //   config.value.socksProxy = '';
-    //   config.value.noProxy = '';
-    //   config.value.address = '';
-    // }
+    
+    try {
+      const backendTypeMap: Record<ProxyType, string> = {
+        'none': 'None',
+        'system': 'System',
+        'manual': 'Manual'
+      };
+      
+      await invoke('set_proxy_type', { proxyType: backendTypeMap[type] });
+      console.log('[ProxyStore] ✅ 设置代理类型成功:', type);
+      
+      // 如果是禁用代理，清除所有代理地址
+      if (type === 'none') {
+        await clearAll();
+      }
+      // 如果是系统代理，自动应用系统代理设置
+      else if (type === 'system') {
+        const result = await applySystemProxy();
+        if (!result.success) {
+          error.value = result.message;
+        }
+      }
+      
+      // 打印当前代理状态
+      await getProxyStatus();
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 设置代理类型失败:', e);
+      error.value = `设置代理类型失败: ${e}`;
+      throw e; // 重新抛出错误，让调用者知道发生了错误
+    }
   }
 
   // 设置HTTP代理
-  function setHTTPProxy(addr: string) {
-    if (isSyncing.value) return;
+  async function setHTTPProxy(addr: string) {
     config.value.httpProxy = addr;
-    // 保持address字段同步（向后兼容）
-    if (addr) config.value.address = addr;
+    
+    try {
+      await invoke('set_http_proxy', { proxy: addr });
+      console.log('[ProxyStore] ✅ 设置HTTP代理成功:', addr);
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 设置HTTP代理失败:', e);
+      error.value = `设置HTTP代理失败: ${e}`;
+    }
   }
 
   // 设置HTTPS代理
-  function setHTTPSProxy(addr: string) {
-    if (isSyncing.value) return;
+  async function setHTTPSProxy(addr: string) {
     config.value.httpsProxy = addr;
+    
+    try {
+      await invoke('set_https_proxy', { proxy: addr });
+      console.log('[ProxyStore] ✅ 设置HTTPS代理成功:', addr);
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 设置HTTPS代理失败:', e);
+      error.value = `设置HTTPS代理失败: ${e}`;
+    }
   }
 
   // 设置SOCKS代理
-  function setSOCKSProxy(addr: string) {
-    if (isSyncing.value) return;
+  async function setSOCKSProxy(addr: string) {
     config.value.socksProxy = addr;
-  }
-
-  // 设置代理例外
-  function setNoProxy(noProxy: string) {
-    if (isSyncing.value) return;
-    config.value.noProxy = noProxy;
-  }
-
-  // 校验代理地址
-  async function validateProxy(address: string): Promise<ProxyValidationResult> {
-    if (!window.go?.main?.App?.ValidateProxyAddress) {
-      return { valid: false, message: '校验功能不可用', formatted: '' };
-    }
     
     try {
-      return await window.go.main.App.ValidateProxyAddress(address);
-    } catch (err) {
-      return { valid: false, message: `校验失败: ${err}`, formatted: '' };
+      await invoke('set_socks5_proxy', { proxy: addr });
+      console.log('[ProxyStore] ✅ 设置SOCKS5代理成功:', addr);
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 设置SOCKS5代理失败:', e);
+      error.value = `设置SOCKS5代理失败: ${e}`;
     }
   }
 
-  // 应用到全部功能
+  // 简化的代理验证（基础格式检查）
+  function validateProxyAddress(address: string): { valid: boolean; message: string; formatted: string } {
+    if (!address.trim()) {
+      return { valid: false, message: '代理地址不能为空', formatted: '' };
+    }
+
+    // 基础格式检查
+    const patterns = [
+      /^https?:\/\/[\w.-]+:\d+$/,  // http://host:port
+      /^socks5:\/\/[\w.-]+:\d+$/,  // socks5://host:port
+      /^[\w.-]+:\d+$/             // host:port
+    ];
+
+    const isValid = patterns.some(pattern => pattern.test(address));
+    
+    if (!isValid) {
+      return { 
+        valid: false, 
+        message: '代理地址格式不正确，应为 host:port 或 protocol://host:port', 
+        formatted: '' 
+      };
+    }
+
+    // 格式化地址
+    let formatted = address;
+    if (!/^https?:\/\/|^socks5:\/\//.test(address)) {
+      formatted = `http://${address}`;
+    }
+
+    return { valid: true, message: '代理地址格式正确', formatted };
+    }
+    
+  // 更新：测试代理连接
+  async function testProxyConnectivity(proxyUrl: string): Promise<{ success: boolean; message: string; details?: TestResult }> {
+    try {
+      console.log('[ProxyStore] 开始测试代理连接:', proxyUrl);
+      
+      const result = await invoke<TestResult>('test_proxy_connectivity', { proxyUrl });
+      
+      if (result.proxy_available) {
+        console.log('[ProxyStore] ✅ 代理连接测试结果:', result);
+        return { 
+          success: true, 
+          message: '代理连接测试完成', 
+          details: result 
+        };
+      } else {
+        console.log('[ProxyStore] ❌ 代理连接测试失败:', result);
+        return { 
+          success: false, 
+          message: result.message,
+          details: result 
+        };
+      }
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 代理连接测试异常:', e);
+      return { 
+        success: false, 
+        message: `测试失败: ${e}` 
+      };
+    }
+  }
+
+  // 新增：应用系统代理设置
+  async function applySystemProxy(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('[ProxyStore] 开始应用系统代理设置');
+      
+      await invoke('apply_system_proxy');
+      
+      // 重新加载设置以同步前端状态
+      await loadProxySettings();
+      
+      console.log('[ProxyStore] ✅ 系统代理设置应用成功');
+      return { success: true, message: '系统代理设置应用成功' };
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 应用系统代理设置失败:', e);
+      return { success: false, message: `应用失败: ${e}` };
+    }
+  }
+  
+  // 新增：应用手动代理设置
+  async function applyManualProxy(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('[ProxyStore] 开始应用手动代理设置');
+      
+      await invoke('apply_manual_proxy');
+      
+      // 重新加载设置以同步前端状态
+      await loadProxySettings();
+      
+      console.log('[ProxyStore] ✅ 手动代理设置应用成功');
+      return { success: true, message: '手动代理设置应用成功' };
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 应用手动代理设置失败:', e);
+      return { success: false, message: `应用失败: ${e}` };
+    }
+  }
+
+
+  // 新增：获取代理状态
+  async function getProxyStatus(): Promise<string> {
+    try {
+      const status = await invoke<string>('get_proxy_status');
+      console.log('[ProxyStore] 当前代理状态:', status);
+      return status;
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 获取代理状态失败:', e);
+      return `获取状态失败: ${e}`;
+    }
+  }
+
+  // 应用到全部功能（增强版，包含代理测试）
   async function applyToAll(sourceAddress: string): Promise<boolean> {
     error.value = null;
+    
     try {
-      const validationResult = await validateProxy(sourceAddress);
+      const validationResult = validateProxyAddress(sourceAddress);
       if (!validationResult.valid) {
         error.value = validationResult.message;
         return false;
@@ -163,117 +367,107 @@ export const useProxyStore = defineStore('proxy', () => {
 
       const formattedAddress = validationResult.formatted;
       
-      // 使用正则表达式从格式化后的地址中提取 host 和 port
+      // 先测试代理连接
+      console.log('[ProxyStore] 测试代理连接...');
+      const testResult = await testProxyConnectivity(formattedAddress);
+      if (!testResult.success) {
+        error.value = `代理不可用: ${testResult.message}`;
+        return false;
+      }
+      
+      // 提取host:port部分
       const match = formattedAddress.match(/^(?:https?|socks5):\/\/(.*)$/);
       const hostAndPort = match ? match[1] : formattedAddress;
 
-      // 为每种协议应用正确的前缀
-      config.value.httpProxy = `http://${hostAndPort}`;
-      config.value.httpsProxy = `https://${hostAndPort}`;
-      config.value.socksProxy = `socks5://${hostAndPort}`;
-      config.value.address = `http://${hostAndPort}`; // 兼容旧版
+      // 为每种协议设置代理
+      await setHTTPProxy(`http://${hostAndPort}`);
+      await setHTTPSProxy(`https://${hostAndPort}`);
+      await setSOCKSProxy(`socks5://${hostAndPort}`);
 
+      // 打印当前代理状态
+      await getProxyStatus();
+
+      console.log('[ProxyStore] ✅ 应用到全部代理成功');
       return true;
     } catch (e: any) {
       error.value = `应用时发生错误: ${e instanceof Error ? e.message : String(e)}`;
+      console.error('[ProxyStore] ❌ 应用到全部失败:', e);
       return false;
     }
   }
 
   // 清除所有代理配置
-  function clearAll() {
-    config.value.address = '';
-    config.value.httpProxy = '';
-    config.value.httpsProxy = '';
-    config.value.socksProxy = '';
-    config.value.noProxy = '';
+  async function clearAll() {
+    try {
+      await setHTTPProxy('');
+      await setHTTPSProxy('');
+      await setSOCKSProxy('');
+      console.log('[ProxyStore] ✅ 清除所有代理配置成功');
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 清除代理配置失败:', e);
+      error.value = `清除代理配置失败: ${e}`;
+    }
   }
 
   // 重置配置为初始状态
-  function resetConfig() {
-    config.value.type = 'none';
-    clearAll();
+  async function resetConfig() {
+    try {
+      await setType('none');
+      await clearAll();
+      console.log('[ProxyStore] ✅ 重置配置成功');
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 重置配置失败:', e);
+      error.value = `重置配置失败: ${e}`;
+    }
   }
 
-  // 从后端初始化配置
-  async function initFromBackend() {
-    if (window.go && window.go.main && window.go.main.App && window.go.main.App.GetProxyConfig) {
-      try {
-        isLoading.value = true;
-        isSyncing.value = true;
-        
-        const backendConfig = await window.go.main.App.GetProxyConfig();
-        console.log('从后端获取配置:', backendConfig);
-        
-        // 合并配置，确保所有字段都存在
-        config.value = {
-          ...defaultConfig,
-          ...backendConfig
-        };
-        
-        isInitialized.value = true;
-        console.log('代理配置初始化完成:', config.value);
-      } catch (err) {
-        error.value = `配置初始化失败: ${err}`;
-        console.error('代理配置初始化失败:', err);
-        isInitialized.value = true;
-      } finally {
-        isLoading.value = false;
-        setTimeout(() => {
-          isSyncing.value = false;
-        }, 200);
-      }
-    } else {
+  // 初始化
+  async function initialize() {
+    try {
+      console.log('[ProxyStore] 开始初始化...');
+      
+      // 并行初始化
+      await Promise.all([
+        initLocalProxyPort(),
+        loadProxySettings()
+      ]);
+      
       isInitialized.value = true;
-    }
-  }
-
-  // 监听后端配置更新事件
-  function listenToBackendEvents() {
-    if (window.runtime && window.runtime.EventsOn) {
-      window.runtime.EventsOn('proxy-config-updated', (newConfig: ProxyConfig) => {
-        console.log('收到后端代理配置更新:', newConfig);
-        isSyncing.value = true;
-        config.value = { ...defaultConfig, ...newConfig };
-        setTimeout(() => {
-          isSyncing.value = false;
-        }, 100);
-      });
-    }
-  }
-
-  // 清理事件监听
-  function cleanup() {
-    if (window.runtime && window.runtime.EventsOff) {
-      window.runtime.EventsOff('proxy-config-updated');
+      console.log('[ProxyStore] ✅ 初始化完成');
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 初始化失败:', e);
+      error.value = `初始化失败: ${e}`;
     }
   }
 
   return { 
-    config,
-    isLoading,
-    error,
-    isInitialized,
+    // 状态
+    config: readonly(config),
+    isLoading: readonly(isLoading),
+    error: readonly(error),
+    isInitialized: readonly(isInitialized),
+    localProxyPort: readonly(localProxyPort),
+    currentProxySettings: readonly(currentProxySettings),
+    
+    // 计算属性
     hasProxyConfig,
+    
+    // 方法
     setType, 
     setHTTPProxy,
     setHTTPSProxy,
     setSOCKSProxy,
-    setNoProxy,
-    validateProxy,
+    validateProxyAddress,
     applyToAll,
     clearAll,
     resetConfig,
-    initFromBackend,
-    listenToBackendEvents,
-    cleanup,
-    localProxyPort,
-    initLocalProxyPort
+    initialize,
+    loadProxySettings,
+    updateBackendProxySettings,
+    // 新增方法
+    testProxyConnectivity,
+    applySystemProxy,
+    applyManualProxy,
+    getProxyStatus,
   };
-}, {
-  persist: {
-    key: 'proxy-config',
-    storage: localStorage,
- 
-  }
 }); 

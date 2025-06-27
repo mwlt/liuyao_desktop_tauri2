@@ -10,16 +10,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     MainContent: typeof import('./src/components/MainContent.vue')['default']
     NavBar: typeof import('./src/components/NavBar.vue')['default']
-    NButton: typeof import('naive-ui')['NButton']
-    NCheckbox: typeof import('naive-ui')['NCheckbox']
-    NInput: typeof import('naive-ui')['NInput']
-    NPopover: typeof import('naive-ui')['NPopover']
-    NRadio: typeof import('naive-ui')['NRadio']
-    NRadioGroup: typeof import('naive-ui')['NRadioGroup']
-    NSpace: typeof import('naive-ui')['NSpace']
     ProxySettingsPopover: typeof import('./src/components/ProxySettingsPopover.vue')['default']
-    Settings: typeof import('./src/components/Settings.vue')['default']
-    Text: typeof import('./src/components/Text.vue')['default']
-    Yext: typeof import('./src/components/Yext.vue')['default']
   }
 }

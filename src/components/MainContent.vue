@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { useProxyStore } from '../store/useProxyStore';
-import { invoke } from '@tauri-apps/api/core';
+// import { invoke } from '@tauri-apps/api/core';
 
 const proxyStore = useProxyStore();
 
@@ -62,7 +62,7 @@ const networkStatus = ref<NetworkStatus>({
 
 // 在组件挂载时设置本地代理服务器地址
 onMounted(async () => {
-  console.log('MainContent 组件已挂载');
+  
   // 使用默认的本地代理地址
   networkStatus.value.localProxyUrl = 'http://www.core333.com';
 });

@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 19:20:01
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-27 00:31:59
+ * @LastEditTime: 2025-06-28 01:30:17
  * @FilePath: \liuyao_desktop_tauri\src\components\NavBar.vue
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 -->
@@ -44,14 +44,14 @@
     
     <!-- 状态显示区域 -->
     <div class="status-info">
-      <div class="network-status">
+      <!-- <div class="network-status">
         <span class="proxy-label">网络状态：</span>
         <span class="status-indicator" :class="networkStatusClass">●</span>
         <span class="status-text"  :class="networkStatusClass">{{ networkStatusText }}</span>
         <span v-if="networkStatus && networkStatus.responseTime" class="response-time">
           ({{ networkStatus.responseTime }}ms)
         </span>
-      </div>
+      </div> -->
       
       <div class="proxy-status">
         <span class="proxy-label">代理:</span>
@@ -93,11 +93,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { NPopover, NButton, NCheckbox } from 'naive-ui';
+import { computed, ref, onMounted } from 'vue';
+import { NPopover, NButton, NIcon, NCheckbox } from 'naive-ui';
 import { useProxyStore } from '../store/useProxyStore';
 import ProxySettingsPopover from './ProxySettingsPopover.vue';
-import { invoke } from '@tauri-apps/api/core';
+// import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 
 // 在系统默认浏览器中打开
@@ -109,52 +109,52 @@ const openInDefaultBrowser = async () => {
   }
 };
 
-interface NetworkStatus {
-  isOnline: boolean;
-  canReachTarget: boolean;
-  errorMessage: string;
-  lastCheck: string;
-  localProxyUrl: string;
-  isLoading: boolean;
-  isError: boolean;
-  isSuccess: boolean;
-  isOffline: boolean;
-  responseTime?: number;
-}
-const networkStatus = ref<NetworkStatus>({
-  isOnline: true,
-  canReachTarget: true,
-  errorMessage: '无法访问目标网站',
-  lastCheck: '2025-06-25 19:21:00',
-  localProxyUrl: 'http://127.0.0.1:8080',
-  isLoading: false,
-  isError: false,
-  isSuccess: false,
-  isOffline: false,
-  responseTime: 0,
-});
-
+// interface NetworkStatus {
+//   isOnline: boolean;
+//   canReachTarget: boolean;
+//   errorMessage: string;
+//   lastCheck: string;
+//   localProxyUrl: string;
+//   isLoading: boolean;
+//   isError: boolean;
+//   isSuccess: boolean;
+//   isOffline: boolean;
+//   responseTime?: number;
+// }
+// const networkStatus = ref<NetworkStatus>({
+//   isOnline: true,
+//   canReachTarget: true,
+//   errorMessage: '无法访问目标网站',
+//   lastCheck: '2025-06-25 19:21:00',
+//   localProxyUrl: 'http://127.0.0.1:8080',
+//   isLoading: false,
+//   isError: false,
+//   isSuccess: false,
+//   isOffline: false,
+//   responseTime: 0,
+// });
+ 
 const proxyStore = useProxyStore();
 
 // 刷新页面
 const refreshPage = () => {
-  window.location.reload();
+  window.location.reload(); 
 };
-
+ 
 // 网络状态相关
-const networkStatusClass = computed(() => {
-  if (!networkStatus.value) return 'status-unknown';
-  if (networkStatus.value.isOnline && networkStatus.value.canReachTarget) return 'status-online';
-  if (networkStatus.value.isOnline) return 'status-warning';
-  return 'status-offline';
-});
+// const networkStatusClass = computed(() => {
+//   if (!networkStatus.value) return 'status-unknown';
+//   if (networkStatus.value.isOnline && networkStatus.value.canReachTarget) return 'status-online';
+//   if (networkStatus.value.isOnline) return 'status-warning';
+//   return 'status-offline';
+// });
 
-const networkStatusText = computed(() => {
-  if (!networkStatus.value) return '检测中...';
-  if (!networkStatus.value.isOnline) return '离线';
-  if (!networkStatus.value.canReachTarget) return '目标不可达';
-  return '正常';
-});
+// const networkStatusText = computed(() => {
+//   if (!networkStatus.value) return '检测中...';
+//   if (!networkStatus.value.isOnline) return '离线';
+//   if (!networkStatus.value.canReachTarget) return '目标不可达';
+//   return '正常';
+// });
 
 // 代理状态相关
 const proxyStatusClass = computed(() => {
@@ -170,7 +170,7 @@ const proxyStatusText = computed(() => {
   switch (proxyStore.config.type) {
     case 'none': return '禁用';
     case 'system': return '系统代理';
-    case 'manual': return `手动 (${proxyStore.config.address})`;
+    case 'manual': return `手动 (${proxyStore.config.httpProxy || proxyStore.config.httpsProxy || proxyStore.config.socksProxy})`;
     default: return '未知';
   }
 });
@@ -179,12 +179,12 @@ const proxyStatusText = computed(() => {
 const isProxyActive = computed(() => {
   return proxyStore.config.type !== 'none';
 });
-
+ 
 </script>
 
 <style scoped>
 .navbar {
-  height: 50px;
+  height: 30px;
   background: #333333; /* 经典深灰色 - 与 titlebar 匹配 */
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
@@ -328,7 +328,8 @@ const isProxyActive = computed(() => {
 
 .proxy-label {
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  color: #ccc;
 }
 
 .proxy-badge {
