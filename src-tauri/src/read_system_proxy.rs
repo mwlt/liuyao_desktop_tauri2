@@ -218,10 +218,8 @@ mod linux_proxy {
                     }
                     
                     // 获取不代理列表
-                    if let Ok(output) = run_command("gsettings", &["get", "org.gnome.system.proxy", "ignore-hosts"]) {
-                        if let Ok(no_proxy) = String::from_utf8(output.stdout) {
-                            proxy_info.no_proxy = no_proxy.trim().trim_matches(&['[', ']', '\''][..]).replace("', '", ",");
-                        }
+                    if let Ok(no_proxy) = run_command("gsettings", &["get", "org.gnome.system.proxy", "ignore-hosts"]) {
+                        proxy_info.no_proxy = no_proxy.trim().trim_matches(&['[', ']', '\''][..]).replace("', '", ",");
                     }
                     
                     Some(proxy_info)
@@ -264,10 +262,8 @@ mod linux_proxy {
                     }
                     
                     // 获取不代理列表
-                    if let Ok(output) = run_command("kreadconfig5", &["--file", "kioslaverc", "--group", "Proxy Settings", "--key", "NoProxyFor"]) {
-                        if let Ok(no_proxy) = String::from_utf8(output.stdout) {
-                            proxy_info.no_proxy = no_proxy.trim().to_string();
-                        }
+                    if let Ok(no_proxy) = run_command("kreadconfig5", &["--file", "kioslaverc", "--group", "Proxy Settings", "--key", "NoProxyFor"]) {
+                        proxy_info.no_proxy = no_proxy.trim().to_string();
                     }
                     
                     Some(proxy_info)
@@ -322,10 +318,8 @@ mod linux_proxy {
                     }
                     
                     // 获取不代理列表
-                    if let Ok(output) = run_command("xfconf-query", &["-c", "xfce4-settings", "-p", "/system/proxy/no_proxy"]) {
-                        if let Ok(no_proxy) = String::from_utf8(output.stdout) {
-                            proxy_info.no_proxy = no_proxy.trim().to_string();
-                        }
+                    if let Ok(no_proxy) = run_command("xfconf-query", &["-c", "xfce4-settings", "-p", "/system/proxy/no_proxy"]) {
+                        proxy_info.no_proxy = no_proxy.trim().to_string();
                     }
                     
                     Some(proxy_info)
@@ -347,7 +341,7 @@ pub fn get_system_proxy() -> SystemProxyInfo {
     // 如果环境变量中没有代理设置，根据桌面环境尝试获取代理设置
     if !proxy_info.proxy_enabled {
         // 检测当前桌面环境
-        match env::var("XDG_CURRENT_DESKTOP") {
+        match std::env::var("XDG_CURRENT_DESKTOP") {
             Ok(desktop) => {
                 match desktop.to_uppercase().as_str() {
                     "KDE" => {
