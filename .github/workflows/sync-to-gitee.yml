@@ -15,12 +15,17 @@ jobs:
           fetch-depth: 0
       
       - name: 同步到 Gitee
-        uses: wearerequired/git-mirror-action@master
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.GITEE_PASSWORD }}
+        uses: x-actions/git-mirror@v1
         with:
-          source-repo: "git@github.com:${{ github.repository }}.git"
-          destination-repo: "git@gitee.com:${{ github.repository_owner }}/liuyao_desktop_tauri.git"
+          src: https://github.com/${{ github.repository }}.git
+          dst: https://gitee.com/${{ github.repository_owner }}/liuyao_desktop_tauri.git
+          dst_key: ${{ secrets.GITEE_PASSWORD }}
+          dst_token: ${{ secrets.GITEE_PASSWORD }}
+          account_type: user
+          # 是否强制同步
+          force: true
+          # 是否启用调试信息
+          debug: true
 
   sync-release:
     needs: sync
