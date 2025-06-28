@@ -21,6 +21,7 @@ jobs:
           dst: gitee/mwlt
           dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
           dst_token: ${{ secrets.GITEE_PASSWORD }}
+          src_token: ${{ secrets.GITHUB_TOKEN }}
           static_list: "liuyao_desktop_tauri2"
           force_update: true
           debug: true
