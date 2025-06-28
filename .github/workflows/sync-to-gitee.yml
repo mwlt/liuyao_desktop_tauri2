@@ -14,13 +14,16 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Configure Git Credentials
+      - name: Configure SSH
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --global credential.helper store
-          echo "https://mwlt:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
-          echo "https://mwlt:${{ secrets.GITEE_PASSWORD }}@gitee.com" >> ~/.git-credentials
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "Host gitee.com" > ~/.ssh/config
+          echo "  HostName gitee.com" >> ~/.ssh/config
+          echo "  User git" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
+          ssh-keyscan gitee.com >> ~/.ssh/known_hosts
       
       - name: 同步到 Gitee
         uses: Yikun/hub-mirror-action@master
@@ -32,7 +35,7 @@ jobs:
           static_list: "liuyao_desktop_tauri2"
           force_update: true
           debug: true
-          clone_style: "https"
+          clone_style: "ssh"
           mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
 
   sync-release:
