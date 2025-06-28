@@ -16,8 +16,11 @@ jobs:
       
       - name: Configure Git Credentials
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global credential.helper store
           echo "https://mwlt:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://mwlt:${{ secrets.GITEE_PASSWORD }}@gitee.com" >> ~/.git-credentials
       
       - name: 同步到 Gitee
         uses: Yikun/hub-mirror-action@master
@@ -31,7 +34,6 @@ jobs:
           debug: true
           clone_style: "https"
           mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
-          src_token: ${{ secrets.GITHUB_TOKEN }}
 
   sync-release:
     needs: sync
