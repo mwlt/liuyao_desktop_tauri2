@@ -227,7 +227,7 @@ mod linux_proxy {
                     None
                 }
             },
-            Err(e) => {
+            Err(_) => {
                 None
             }
         }
@@ -271,7 +271,7 @@ mod linux_proxy {
                     None
                 }
             },
-            Err(e) => {
+            Err(_) => {
                 None
             }
         }
@@ -327,7 +327,7 @@ mod linux_proxy {
                     None
                 }
             },
-            Err(e) => {
+            Err(_) => {
                 None
             }
         }
@@ -362,7 +362,7 @@ pub fn get_system_proxy() -> SystemProxyInfo {
                     }
                 }
             },
-            Err(e) => {
+            Err(_) => {
             }
         }
     }
