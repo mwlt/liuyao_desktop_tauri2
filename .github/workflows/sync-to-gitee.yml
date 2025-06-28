@@ -11,33 +11,38 @@ jobs:
   repo-sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史记录
+          
       - name: Mirror the Github repository to Gitee
         uses: Yikun/hub-mirror-action@v1.5
         with:
-          src: github/mwlt/liuyao_desktop_tauri2
-          dst: gitee/mwlt/liuyao_desktop_tauri
+          src: github/mwlt
+          dst: gitee/mwlt
           dst_token: ${{ secrets.GITEE_TOKEN }}
           account_type: user
           force_update: true
           static_list: "liuyao_desktop_tauri2"
           release: true
+          timeout: 600
 
-  sync-release:
+  notify-release:
     needs: repo-sync
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v3
-        with:
-          name: release-assets
-          path: release-assets
-
-      - name: Create Gitee Release
-        uses: yanglbme/gitee-pages-action@main
-        with:
-          gitee-username: ${{ secrets.GITEE_USERNAME }}
-          gitee-password: ${{ secrets.GITEE_PASSWORD }}
-          gitee-repo: mwlt/liuyao_desktop_tauri
-          branch: main 
+      - name: Notify about new release
+        run: |
+          echo "🎉 新版本已发布: ${{ github.event.release.tag_name }}"
+          echo "📦 Release 名称: ${{ github.event.release.name }}"
+          echo "🔗 GitHub Release: ${{ github.event.release.html_url }}"
+          echo ""
+          echo "⚠️  请手动到 Gitee 仓库检查 Release 是否同步成功"
+          echo "🌐 Gitee 仓库: https://gitee.com/mwlt/liuyao_desktop_tauri2"
+          echo ""
+          echo "如果 Release 未自动同步，请手动创建："
+          echo "1. 访问 https://gitee.com/mwlt/liuyao_desktop_tauri2/releases"
+          echo "2. 点击 '发行版' -> '创建发行版'"
+          echo "3. 使用标签: ${{ github.event.release.tag_name }}"
+          echo "4. 从 GitHub Release 下载并上传安装包文件" 
