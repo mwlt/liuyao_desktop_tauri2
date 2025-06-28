@@ -41,13 +41,6 @@
       "wix": {
         "language": "zh-CN"
       }
-    },
-    "linux": {
-      "deb": {
-        "files": {
-          "/usr/bin/liuyao-desktop": "bin/liuyao-desktop"
-        }
-      }
     }
   }
 }
