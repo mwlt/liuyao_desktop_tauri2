@@ -60,7 +60,7 @@ jobs:
             aarch64-pc-windows-msvc
 
       - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'ubuntu-latest' || matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
@@ -78,3 +78,4 @@ jobs:
           releaseBody: '请查看 CHANGELOG.md 了解更新内容。'
           releaseDraft: true
           prerelease: false
+ 
