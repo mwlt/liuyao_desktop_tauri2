@@ -1,0 +1,9 @@
+GitHub-Gitee 同步测试
+=====================
+
+测试时间: 06/28/2025 19:23:25
+测试目的: 验证自动同步功能
+源仓库: mwlt/liuyao_desktop_tauri2
+目标仓库: mwlt/liuyao_desktop_tauri
+
+如果你在 Gitee 仓库中看到这个文件，说明同步功能正常工作！
