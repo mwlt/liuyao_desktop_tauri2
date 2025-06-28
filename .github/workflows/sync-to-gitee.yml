@@ -14,6 +14,11 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Configure Git Credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://mwlt:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+      
       - name: 同步到 Gitee
         uses: Yikun/hub-mirror-action@master
         with:
@@ -21,10 +26,10 @@ jobs:
           dst: gitee/mwlt
           dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
           dst_token: ${{ secrets.GITEE_PASSWORD }}
-          src_token: ${{ secrets.GITHUB_TOKEN }}
           static_list: "liuyao_desktop_tauri2"
           force_update: true
           debug: true
+          clone_style: "https"
 
   sync-release:
     needs: sync
