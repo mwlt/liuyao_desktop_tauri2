@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN || github.token }}
+          token: ${{ github.token }}
       
       - name: Configure Git and SSH
         run: |
@@ -23,7 +23,7 @@ jobs:
           
           # 配置 Git 凭证
           git config --global credential.helper store
-          echo "https://mwlt:${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://x-access-token:${{ github.token }}@github.com" > ~/.git-credentials
           
           # 配置 Gitee SSH
           mkdir -p ~/.ssh
@@ -53,7 +53,7 @@ jobs:
           clone_style: "https"
           mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
   sync-release:
     needs: sync
