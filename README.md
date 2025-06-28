@@ -8,9 +8,9 @@
 -->
 # 六爻排盘与研究  桌面版
 
-基于 Tauri + Vue3 + TypeScript 开发的六爻桌面应用。
+测试 GitHub 到 Gitee 的自动同步功能 - 测试时间：2024-03-27
 
-测试 GitHub 到 Gitee 的自动同步功能 - 测试时间：$(date +%Y-%m-%d %H:%M:%S)
+基于 Tauri + Vue3 + TypeScript 开发的六爻桌面应用。
 
 ## 功能特点
 
