@@ -258,7 +258,7 @@ import {
   NSpace, 
   NInput, 
   NButton,
-  
+ 
   NIcon
 } from 'naive-ui';
 import { useProxyStore } from '../store/useProxyStore';
@@ -553,8 +553,8 @@ async function testConnection() {
             // 根据测试结果设置状态
             if (testResult.details.proxy_available && 
                (testResult.details.core333_accessible || testResult.details.google_accessible)) {
-              resultType.value = 'success';
-            } else {
+        resultType.value = 'success';
+      } else {
               resultType.value = 'error';
             }
           }
