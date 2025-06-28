@@ -51,6 +51,8 @@ jobs:
           debug: true
           clone_style: "https"
           mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   sync-release:
     needs: sync
