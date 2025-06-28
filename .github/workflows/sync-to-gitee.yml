@@ -14,44 +14,29 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Configure SSH
+      - name: Configure Git and SSH
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          # 配置 Git 用户信息
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # 配置 GitHub SSH（使用默认文件名）
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          # 配置 Git 凭证
+          git config --global credential.helper store
+          echo "https://mwlt:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
           
           # 配置 Gitee SSH
-          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/gitee_id_rsa
-          chmod 600 ~/.ssh/gitee_id_rsa
-          
-          # SSH 配置文件
-          cat > ~/.ssh/config << EOF
-          Host github.com
-            HostName github.com
-            User git
-            IdentityFile ~/.ssh/id_rsa
-            StrictHostKeyChecking no
-          
-          Host gitee.com
-            HostName gitee.com
-            User git
-            IdentityFile ~/.ssh/gitee_id_rsa
-            StrictHostKeyChecking no
-          EOF
-          
-          chmod 600 ~/.ssh/config
-          
-          # 添加已知主机
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
           
-          # 测试连接
-          echo "Testing GitHub connection..."
-          ssh -T git@github.com || true
-          echo "Testing Gitee connection..."
+          # 测试 GitHub HTTPS 访问
+          echo "Testing GitHub HTTPS access..."
+          git ls-remote https://github.com/mwlt/liuyao_desktop_tauri2.git HEAD || true
+          
+          # 测试 Gitee SSH 访问
+          echo "Testing Gitee SSH access..."
           ssh -T git@gitee.com || true
       
       - name: 同步到 Gitee
@@ -64,7 +49,7 @@ jobs:
           static_list: "liuyao_desktop_tauri2"
           force_update: true
           debug: true
-          clone_style: "ssh"
+          clone_style: "https"
           mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
 
   sync-release:
