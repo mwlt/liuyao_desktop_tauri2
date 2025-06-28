@@ -17,23 +17,42 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          # 配置 GitHub SSH
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_id_rsa
-          chmod 600 ~/.ssh/github_id_rsa
-          echo "Host github.com" > ~/.ssh/config
-          echo "  HostName github.com" >> ~/.ssh/config
-          echo "  User git" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/github_id_rsa" >> ~/.ssh/config
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          
+          # 配置 GitHub SSH（使用默认文件名）
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           
           # 配置 Gitee SSH
           echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/gitee_id_rsa
           chmod 600 ~/.ssh/gitee_id_rsa
-          echo "Host gitee.com" >> ~/.ssh/config
-          echo "  HostName gitee.com" >> ~/.ssh/config
-          echo "  User git" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/gitee_id_rsa" >> ~/.ssh/config
+          
+          # SSH 配置文件
+          cat > ~/.ssh/config << EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+          
+          Host gitee.com
+            HostName gitee.com
+            User git
+            IdentityFile ~/.ssh/gitee_id_rsa
+            StrictHostKeyChecking no
+          EOF
+          
+          chmod 600 ~/.ssh/config
+          
+          # 添加已知主机
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+          
+          # 测试连接
+          echo "Testing GitHub connection..."
+          ssh -T git@github.com || true
+          echo "Testing Gitee connection..."
+          ssh -T git@gitee.com || true
       
       - name: 同步到 Gitee
         uses: Yikun/hub-mirror-action@master
