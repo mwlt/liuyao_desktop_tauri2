@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Mirror the Github repository to Gitee
-        uses: Yikun/hub-mirror-action@v1.7
+        uses: Yikun/hub-mirror-action@v1.5
         with:
           src: github/mwlt/liuyao_desktop_tauri2
           dst: gitee/mwlt/liuyao_desktop_tauri
