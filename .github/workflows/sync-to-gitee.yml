@@ -45,6 +45,7 @@ jobs:
         with:
           src: github/mwlt
           dst: gitee/mwlt
+          src_token: ${{ secrets.SRC_GITHUB_TOKEN }}
           dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
           dst_token: ${{ secrets.GITEE_PASSWORD }}
           static_list: "liuyao_desktop_tauri2"
