@@ -25,7 +25,6 @@ jobs:
           account_type: user
           force_update: true
           static_list: "liuyao_desktop_tauri2"
-          mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
           timeout: 600
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,10 +41,10 @@ jobs:
           echo "🔗 GitHub Release: ${{ github.event.release.html_url }}"
           echo ""
           echo "⚠️  请手动到 Gitee 仓库检查 Release 是否同步成功"
-          echo "🌐 Gitee 仓库: https://gitee.com/mwlt/liuyao_desktop_tauri"
+          echo "🌐 Gitee 仓库: https://gitee.com/mwlt/liuyao_desktop_tauri2"
           echo ""
           echo "如果 Release 未自动同步，请手动创建："
-          echo "1. 访问 https://gitee.com/mwlt/liuyao_desktop_tauri/releases"
+          echo "1. 访问 https://gitee.com/mwlt/liuyao_desktop_tauri2/releases"
           echo "2. 点击 '发行版' -> '创建发行版'"
           echo "3. 使用标签: ${{ github.event.release.tag_name }}"
           echo "4. 从 GitHub Release 下载并上传安装包文件" 
