@@ -10,6 +10,8 @@
 
 基于 Tauri + Vue3 + TypeScript 开发的六爻桌面应用。
 
+测试 GitHub 到 Gitee 的自动同步功能 - 测试时间：$(date +%Y-%m-%d %H:%M:%S)
+
 ## 功能特点
 
 - 🚀 基于 Tauri，性能高，体积小
