@@ -30,6 +30,7 @@ jobs:
           force_update: true
           debug: true
           clone_style: "https"
+          mappings: "liuyao_desktop_tauri2=>liuyao_desktop_tauri"
 
   sync-release:
     needs: sync
@@ -47,5 +48,5 @@ jobs:
         with:
           gitee-username: ${{ secrets.GITEE_USERNAME }}
           gitee-password: ${{ secrets.GITEE_PASSWORD }}
-          gitee-repo: ${{ github.repository_owner }}/liuyao_desktop_tauri2
+          gitee-repo: mwlt/liuyao_desktop_tauri
           branch: main 
