@@ -15,16 +15,14 @@ jobs:
           fetch-depth: 0
       
       - name: 同步到 Gitee
-        uses: x-actions/git-mirror@v1
+        uses: Yikun/hub-mirror-action@master
         with:
-          src: https://github.com/${{ github.repository }}.git
-          dst: https://gitee.com/${{ github.repository_owner }}/liuyao_desktop_tauri.git
-          dst_key: ${{ secrets.GITEE_PASSWORD }}
+          src: github/mwlt
+          dst: gitee/mwlt
+          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
           dst_token: ${{ secrets.GITEE_PASSWORD }}
-          account_type: user
-          # 是否强制同步
-          force: true
-          # 是否启用调试信息
+          static_list: "liuyao_desktop_tauri2"
+          force_update: true
           debug: true
 
   sync-release:
@@ -43,5 +41,5 @@ jobs:
         with:
           gitee-username: ${{ secrets.GITEE_USERNAME }}
           gitee-password: ${{ secrets.GITEE_PASSWORD }}
-          gitee-repo: ${{ github.repository_owner }}/liuyao_desktop_tauri
+          gitee-repo: ${{ github.repository_owner }}/liuyao_desktop_tauri2
           branch: main 
