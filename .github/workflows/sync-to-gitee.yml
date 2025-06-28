@@ -18,7 +18,7 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           # 配置 GitHub SSH
-          echo "${{ secrets.GITHUB_SSH_PRIVATE_KEY }}" > ~/.ssh/github_id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_id_rsa
           chmod 600 ~/.ssh/github_id_rsa
           echo "Host github.com" > ~/.ssh/config
           echo "  HostName github.com" >> ~/.ssh/config
