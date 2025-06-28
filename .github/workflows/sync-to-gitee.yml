@@ -17,12 +17,22 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          echo "Host gitee.com" > ~/.ssh/config
+          # 配置 GitHub SSH
+          echo "${{ secrets.GITHUB_SSH_PRIVATE_KEY }}" > ~/.ssh/github_id_rsa
+          chmod 600 ~/.ssh/github_id_rsa
+          echo "Host github.com" > ~/.ssh/config
+          echo "  HostName github.com" >> ~/.ssh/config
+          echo "  User git" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/github_id_rsa" >> ~/.ssh/config
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          
+          # 配置 Gitee SSH
+          echo "${{ secrets.GITEE_PRIVATE_KEY }}" > ~/.ssh/gitee_id_rsa
+          chmod 600 ~/.ssh/gitee_id_rsa
+          echo "Host gitee.com" >> ~/.ssh/config
           echo "  HostName gitee.com" >> ~/.ssh/config
           echo "  User git" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/gitee_id_rsa" >> ~/.ssh/config
           ssh-keyscan gitee.com >> ~/.ssh/known_hosts
       
       - name: 同步到 Gitee
