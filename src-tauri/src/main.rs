@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 18:05:32
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-27 22:58:37
+ * @LastEditTime: 2025-06-29 00:03:30
  * @FilePath: \liuyao_desktop_tauri\src-tauri\src\main.rs
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -17,6 +17,7 @@ use once_cell::sync::Lazy;
 mod read_system_proxy;
 use read_system_proxy::get_system_proxy_info;
 use serde::Serialize;
+use env_logger;
 
 // 全局代理服务器实例
 static PROXY_SERVER: Lazy<Mutex<Option<ProxyServer>>> = Lazy::new(|| Mutex::new(None));
@@ -304,34 +305,40 @@ fn apply_system_proxy() -> Result<(), String> {
     let system_proxy = get_system_proxy_info();
     println!("[main] 获取到系统代理信息: {:?}", system_proxy);
     
-    if !system_proxy.proxy_enabled {
-        println!("[main] 系统代理未启用，设置为直连模式");
-        return set_proxy_type("None".to_string());
-    }
-    
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
             settings.proxy_type = ProxyType::System;
             
-            // 应用系统代理设置
-            if !system_proxy.http_proxy.is_empty() {
-                settings.http_proxy = Some(system_proxy.http_proxy.clone());
-                println!("[main] 应用系统HTTP代理: {}", system_proxy.http_proxy);
-            }
-            
-            if !system_proxy.https_proxy.is_empty() {
-                settings.https_proxy = Some(system_proxy.https_proxy.clone());
-                println!("[main] 应用系统HTTPS代理: {}", system_proxy.https_proxy);
-            }
-            
-            if !system_proxy.socks_proxy.is_empty() {
-                settings.socks5_proxy = Some(system_proxy.socks_proxy.clone());
-                println!("[main] 应用系统SOCKS代理: {}", system_proxy.socks_proxy);
+            if system_proxy.proxy_enabled {
+                // 系统代理已启用，应用系统代理设置
+                if !system_proxy.http_proxy.is_empty() {
+                    settings.http_proxy = Some(system_proxy.http_proxy.clone());
+                    println!("[main] 应用系统HTTP代理: {}", system_proxy.http_proxy);
+                }
+                
+                if !system_proxy.https_proxy.is_empty() {
+                    settings.https_proxy = Some(system_proxy.https_proxy.clone());
+                    println!("[main] 应用系统HTTPS代理: {}", system_proxy.https_proxy);
+                }
+                
+                if !system_proxy.socks_proxy.is_empty() {
+                    settings.socks5_proxy = Some(system_proxy.socks_proxy.clone());
+                    println!("[main] 应用系统SOCKS代理: {}", system_proxy.socks_proxy);
+                }
+                
+                settings.enabled = true;
+                println!("[main] ✅ 系统代理设置已应用: {:?}", settings);
+            } else {
+                // 系统代理未启用，但仍然设置为系统代理模式，只是暂时不启用
+                settings.http_proxy = None;
+                settings.https_proxy = None;
+                settings.socks5_proxy = None;
+                settings.enabled = false;
+                println!("[main] 系统代理未启用，设置为系统代理模式但暂不启用");
             }
             
             server.update_proxy_settings(settings.clone());
-            println!("[main] ✅ 系统代理设置已应用: {:?}", settings);
             Ok(())
         } else {
             Err("代理服务器未启动".to_string())
@@ -389,6 +396,24 @@ fn apply_manual_proxy() -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 设置日志级别
+    std::env::set_var("RUST_LOG", "info");
+    env_logger::init();
+    
+    // 预设代理环境变量（使用默认端口8080）
+    // 如果8080被占用，代理服务器会自动切换到其他端口
+    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:8080");
+    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:8080");
+    println!("🔧 预设WebView代理环境变量: HTTP_PROXY=http://127.0.0.1:8080");
+    
+    // 使用 Result 来处理错误
+    if let Err(e) = run_app() {
+        eprintln!("应用程序运行失败: {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
@@ -409,22 +434,16 @@ pub fn run() {
         ])
         .setup(|app| {
             // 在setup中启动本地代理服务器，自动检测端口
-            let proxy = ProxyServer::start_auto_port(8080, 8099);
-            let proxy_port = match proxy {
-                Some(server) => {
-                    println!("本地代理服务器已启动，端口: {}", server.port);
-                    *LOCAL_PROXY_PORT.lock().unwrap() = server.port;
-                    
-                    // 保存代理服务器实例到全局变量
-                    *PROXY_SERVER.lock().unwrap() = Some(server);
-                    
-                    *LOCAL_PROXY_PORT.lock().unwrap()
-                },
-                None => {
-                    println!("未能找到可用端口，代理服务器启动失败");
-                    return Err("代理服务器启动失败".into());
-                }
-            };
+            let proxy = ProxyServer::start_auto_port(8080, 8099)
+                .ok_or("未能找到可用端口，代理服务器启动失败")?;
+            
+            println!("本地代理服务器已启动，端口: {}", proxy.port);
+            *LOCAL_PROXY_PORT.lock().unwrap() = proxy.port;
+            
+            // 保存代理服务器实例到全局变量
+            *PROXY_SERVER.lock().unwrap() = Some(proxy);
+            
+            let proxy_port = *LOCAL_PROXY_PORT.lock().unwrap();
             
             // 设置 WebView 代理环境变量
             std::env::set_var("HTTP_PROXY", format!("http://127.0.0.1:{}", proxy_port));
@@ -434,15 +453,15 @@ pub fn run() {
             // 获取主窗口并确保它显示
             if let Some(window) = app.get_webview_window("main") {
                 // 强制显示窗口
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
+                window.show()?;
+                window.unminimize()?;
+                window.set_focus()?;
                 
                 // 居中窗口
-                let _ = window.center();
+                window.center()?;
                 
                 // 设置窗口置顶（暂时）
-                let _ = window.set_always_on_top(true);
+                window.set_always_on_top(true)?;
                 
                 println!("✅ 主窗口已强制显示、置顶、居中并获得焦点");
                 
@@ -450,25 +469,20 @@ pub fn run() {
                 let window_clone = window.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(2));
-                    let _ = window_clone.set_always_on_top(false);
+                    if let Err(e) = window_clone.set_always_on_top(false) {
+                        eprintln!("取消窗口置顶失败: {}", e);
+                    }
                     println!("窗口置顶已取消");
                 });
                 
-                // 设置WebView代理（如果支持的话）
                 println!("WebView已配置为使用代理: 127.0.0.1:{}", proxy_port);
             }
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .map_err(|e| e.into())
 }
 
 fn main() {
-    // 预设代理环境变量（使用默认端口8080）
-    // 如果8080被占用，代理服务器会自动切换到其他端口
-    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:8080");
-    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:8080");
-    println!("🔧 预设WebView代理环境变量: HTTP_PROXY=http://127.0.0.1:8080");
-    
     run();
 }

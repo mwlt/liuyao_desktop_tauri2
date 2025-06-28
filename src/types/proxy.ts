@@ -11,4 +11,11 @@ export interface ProxyValidationResult {
   valid: boolean;
   message: string;
   formatted: string;
+}
+
+export interface TestResult {
+  proxy_available: boolean;
+  core333_accessible: boolean;
+  google_accessible: boolean;
+  message: string;
 } 

@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-26 00:11:01
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-27 16:52:44
+ * @LastEditTime: 2025-06-29 04:10:27
  * @FilePath: \liuyao_desktop_tauri\src-tauri\src\proxy_server.rs
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -12,8 +12,10 @@ use std::io::{Read, Write};
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-const BUFFER_SIZE: usize = 1024 * 1024; // 1MB buffer
+const BUFFER_SIZE: usize = 16 * 1024; // 16KB buffer，对大多数HTTP请求足够
+const WS_BUFFER_SIZE: usize = 32 * 1024; // 32KB for WebSocket，为WebSocket连接提供更大缓冲区
 const TIMEOUT: u64 = 60; // 60秒超时
 
 // 新增：代理配置结构体
@@ -514,64 +516,145 @@ fn parse_target(target: &str) -> std::io::Result<(String, u16)> {
     }
 }
 
-fn tunnel(mut a: TcpStream, mut b: TcpStream) {
+fn tunnel(a: TcpStream, b: TcpStream) {
     let timeout = Duration::from_secs(TIMEOUT);
     let _ = a.set_read_timeout(Some(timeout));
     let _ = a.set_write_timeout(Some(timeout));
     let _ = b.set_read_timeout(Some(timeout));
     let _ = b.set_write_timeout(Some(timeout));
+    
+    // 设置TCP_NODELAY以优化性能
+    let _ = a.set_nodelay(true);
+    let _ = b.set_nodelay(true);
 
-    let mut a2b = a.try_clone().unwrap();
-    let mut b2a = b.try_clone().unwrap();
+    // 克隆流以避免所有权问题
+    let a2b = match a.try_clone() {
+        Ok(stream) => stream,
+        Err(e) => {
+            println!("[proxy] 克隆流失败: {}", e);
+            return;
+        }
+    };
     
-    let t1 = thread::spawn(move || {
-        let mut buf = vec![0u8; BUFFER_SIZE];
-        loop {
-            match a2b.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if b.write_all(&buf[..n]).is_err() || b.flush().is_err() {
-                        break;
+    let b2a = match b.try_clone() {
+        Ok(stream) => stream,
+        Err(e) => {
+            println!("[proxy] 克隆流失败: {}", e);
+            return;
+        }
+    };
+    
+    // 使用Arc<AtomicBool>来控制线程终止
+    let stop_signal = Arc::new(AtomicBool::new(false));
+    let stop_signal_clone = Arc::clone(&stop_signal);
+    
+    // 根据连接类型选择缓冲区大小
+    let buffer_size = if a2b.peer_addr().map(|addr| addr.port() == 443).unwrap_or(false) {
+        WS_BUFFER_SIZE // WebSocket连接使用更大的缓冲区
+    } else {
+        BUFFER_SIZE // 普通HTTP连接使用标准缓冲区
+    };
+    
+    // 创建两个线程处理双向数据传输
+    let t1 = {
+        let mut a2b = a2b;
+        let mut b = b.try_clone().unwrap();
+        let stop_signal = Arc::clone(&stop_signal);
+        
+        thread::spawn(move || {
+            let mut buf = vec![0u8; buffer_size];
+            while !stop_signal.load(Ordering::Relaxed) {
+                match a2b.read(&mut buf) {
+                    Ok(0) => break, // 连接关闭
+                    Ok(n) => {
+                        if b.write_all(&buf[..n]).is_err() || b.flush().is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                            break;
+                        }
                     }
                 }
-                Err(_) => break,
             }
-        }
-    });
+            // 通知另一个线程也停止
+            stop_signal.store(true, Ordering::Relaxed);
+            // 显式释放缓冲区
+            drop(buf);
+        })
+    };
     
-    let t2 = thread::spawn(move || {
-        let mut buf = vec![0u8; BUFFER_SIZE];
-        loop {
-            match b2a.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if a.write_all(&buf[..n]).is_err() || a.flush().is_err() {
-                        break;
+    let t2 = {
+        let mut b2a = b2a;
+        let mut a = a.try_clone().unwrap();
+        let stop_signal = stop_signal_clone;
+        
+        thread::spawn(move || {
+            let mut buf = vec![0u8; buffer_size];
+            while !stop_signal.load(Ordering::Relaxed) {
+                match b2a.read(&mut buf) {
+                    Ok(0) => break, // 连接关闭
+                    Ok(n) => {
+                        if a.write_all(&buf[..n]).is_err() || a.flush().is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                            break;
+                        }
                     }
                 }
-                Err(_) => break,
             }
-        }
-    });
+            // 通知另一个线程也停止
+            stop_signal.store(true, Ordering::Relaxed);
+            // 显式释放缓冲区
+            drop(buf);
+        })
+    };
     
+    // 等待两个线程完成
     let _ = t1.join();
     let _ = t2.join();
 }
 
 fn handle_client(mut client_stream: TcpStream, settings: Arc<Mutex<ProxySettings>>) {
+    // 设置TCP优化选项
+    let _ = client_stream.set_nodelay(true);
+    
+    // 设置超时
     let timeout = Duration::from_secs(TIMEOUT);
     let _ = client_stream.set_read_timeout(Some(timeout));
     let _ = client_stream.set_write_timeout(Some(timeout));
 
-    let mut buffer = vec![0; BUFFER_SIZE];
-    let Ok(size) = client_stream.read(&mut buffer) else { return };
-    if size == 0 { return; }
+    // 使用栈分配而不是堆分配来减少内存压力
+    let mut buffer = [0u8; BUFFER_SIZE];
+    let size = match client_stream.read(&mut buffer) {
+        Ok(0) => return, // 连接已关闭
+        Ok(n) => n,
+        Err(e) => {
+            println!("[proxy] 读取请求错误: {}", e);
+            return;
+        }
+    };
     
-    let request = String::from_utf8_lossy(&buffer[..size]);
+    let request = match String::from_utf8_lossy(&buffer[..size]).to_string() {
+        s if s.is_empty() => return,
+        s => s
+    };
+    
     let mut lines = request.lines();
-    let Some(request_line) = lines.next() else { return };
+    let request_line = match lines.next() {
+        Some(line) => line,
+        None => return
+    };
+    
     let parts: Vec<&str> = request_line.split_whitespace().collect();
-    if parts.len() < 2 { return; }
+    if parts.len() < 2 {
+        println!("[proxy] 无效的请求行: {}", request_line);
+        return;
+    }
     
     println!("[proxy] 请求: {}", request_line);
     
@@ -581,173 +664,242 @@ fn handle_client(mut client_stream: TcpStream, settings: Arc<Mutex<ProxySettings
         println!("[proxy] 检测到WebSocket连接请求");
     }
     
-    if parts[0].eq_ignore_ascii_case("CONNECT") {
-        let host_port = parts[1];
-        let mut host = host_port;
-        let mut port = 443u16;
-        if let Some(idx) = host_port.find(':') {
-            host = &host_port[..idx];
-            if let Ok(p) = host_port[idx+1..].parse() {
-                port = p;
-            }
-        }
+    // 使用 Result 和 ? 操作符来简化错误处理
+    if let Err(e) = handle_request(&mut client_stream, &parts, &request, is_websocket, &settings) {
+        println!("[proxy] 处理请求失败: {}", e);
+        let _ = client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n");
+    }
+}
 
-        let target_addr = format!("{}:{}", host, port);
-        println!("[proxy] CONNECT请求到: {}", target_addr);
-        
-        // 检查是否可能是WebSocket连接（通常通过8000端口）
-        if port == 8000 {
-            println!("[proxy] 可能是WebSocket CONNECT请求");
+// 将请求处理逻辑分离到单独的函数
+fn handle_request(
+    client_stream: &mut TcpStream,
+    parts: &[&str],
+    request: &str,
+    is_websocket: bool,
+    settings: &Arc<Mutex<ProxySettings>>
+) -> std::io::Result<()> {
+    match parts[0].to_uppercase().as_str() {
+        "CONNECT" => handle_connect_request(client_stream, parts, is_websocket, settings),
+        _ => handle_http_request(client_stream, parts, request, is_websocket, settings)
+    }
+}
+
+// 处理 CONNECT 请求
+fn handle_connect_request(
+    client_stream: &mut TcpStream,
+    parts: &[&str],
+    _is_websocket: bool,  // 添加下划线前缀表示有意未使用
+    settings: &Arc<Mutex<ProxySettings>>
+) -> std::io::Result<()> {
+    let host_port = parts[1];
+    let (host, port) = match host_port.find(':') {
+        Some(idx) => {
+            let host = &host_port[..idx];
+            let port = host_port[idx+1..].parse().unwrap_or(443);
+            (host, port)
         }
-        
-        let proxy_settings = settings.lock().unwrap().clone();
-        
-        match connect_with_proxy_settings(&target_addr, &proxy_settings) {
-                Ok(target_stream) => {
-                println!("[proxy] CONNECT隧道建立成功: {}", target_addr);
-                    let _ = client_stream.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n");
-                    tunnel(client_stream, target_stream);
-                }
-            Err(e) => {
-                println!("[proxy] CONNECT隧道建立失败: {} - {}", target_addr, e);
-                    let _ = client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n");
-            }
-        }
-        return;
+        None => (host_port, 443)
+    };
+
+    let target_addr = format!("{}:{}", host, port);
+    println!("[proxy] CONNECT请求到: {}", target_addr);
+    
+    if port == 8000 {
+        println!("[proxy] 可能是WebSocket CONNECT请求");
     }
     
-    // 处理HTTP请求
+    let proxy_settings = settings.lock().unwrap().clone();
+    
+    match connect_with_proxy_settings(&target_addr, &proxy_settings) {
+        Ok(target_stream) => {
+            println!("[proxy] CONNECT隧道建立成功: {}", target_addr);
+            client_stream.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")?;
+            tunnel(client_stream.try_clone()?, target_stream);
+            Ok(())
+        }
+        Err(e) => {
+            println!("[proxy] CONNECT隧道建立失败: {} - {}", target_addr, e);
+            client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
+            Err(e)
+        }
+    }
+}
+
+// 处理 HTTP 请求
+fn handle_http_request(
+    client_stream: &mut TcpStream,
+    parts: &[&str],
+    request: &str,
+    is_websocket: bool,
+    settings: &Arc<Mutex<ProxySettings>>
+) -> std::io::Result<()> {
     let mut url = parts[1].to_string();
     
-    // 保留现有的URL重写规则
     if url.contains("/api/admin/") {
         url = url.replace("/api/admin/", "/admin/");
         println!("[proxy] URL重写: {} -> {}", parts[1], url);
     }
     
-    // 如果是绝对URL
     if url.starts_with("http://") || url.starts_with("ws://") || url.starts_with("wss://") {
-        let is_ws = url.starts_with("ws://");
-        let is_wss = url.starts_with("wss://");
-        let is_websocket = is_ws || is_wss;
-        
-        let url = &url[if is_wss { 6 } else if is_ws { 5 } else { 7 }..]; // wss:// 是6个字符, ws:// 是5个字符, http:// 是7个字符
-        let host_end = url.find('/').unwrap_or(url.len());
-        let host_port = &url[..host_end];
-        let mut host = host_port;
-        let mut port = if is_wss { 443u16 } else if is_ws { 8000u16 } else { 80u16 }; // wss默认443, ws默认8000, http默认80
-        if let Some(idx) = host_port.find(':') {
-            host = &host_port[..idx];
-            if let Ok(p) = host_port[idx+1..].parse() {
-                port = p;
-            }
+        handle_absolute_url(client_stream, &url, request, is_websocket, settings)
+    } else if url.starts_with("/") {
+        handle_relative_url(client_stream, &url, request, is_websocket)
+    } else {
+        println!("[proxy] 不支持的URL格式: {}", url);
+        client_stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")?;
+        Ok(())
+    }
+}
+
+// 处理绝对URL请求
+fn handle_absolute_url(
+    client_stream: &mut TcpStream,
+    url: &str,
+    request: &str,
+    is_websocket: bool,
+    settings: &Arc<Mutex<ProxySettings>>
+) -> std::io::Result<()> {
+    let is_ws = url.starts_with("ws://");
+    let is_wss = url.starts_with("wss://");
+    let is_websocket = is_websocket || is_ws || is_wss;
+    
+    let url_without_scheme = &url[if is_wss { 6 } else if is_ws { 5 } else { 7 }..];
+    let host_end = url_without_scheme.find('/').unwrap_or(url_without_scheme.len());
+    let host_port = &url_without_scheme[..host_end];
+    
+    let (host, port) = match host_port.find(':') {
+        Some(idx) => {
+            let host = &host_port[..idx];
+            let port = host_port[idx+1..].parse().unwrap_or(if is_wss { 443 } else if is_ws { 8000 } else { 80 });
+            (host, port)
         }
-        
-        if is_websocket {
-            println!("[proxy] WebSocket连接到: {}:{} ({})", host, port, if is_wss { "WSS" } else { "WS" });
-        }
-        
-        let target_addr = format!("{}:{}", host, port);
-        let proxy_settings = settings.lock().unwrap().clone();
-        
-        let mut target_stream = match connect_with_proxy_settings(&target_addr, &proxy_settings) {
-                Ok(stream) => stream,
-            Err(e) => {
-                println!("[proxy] 连接失败: {}", e);
-                            let _ = client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n");
-                            return;
-                        }
-        };
-
-        // 对于WebSocket连接，使用更长的超时时间
-        let ws_timeout = if is_websocket { Duration::from_secs(300) } else { timeout }; // WebSocket 5分钟超时
-        let _ = target_stream.set_read_timeout(Some(ws_timeout));
-        let _ = target_stream.set_write_timeout(Some(ws_timeout));
-
-        // 构建新的请求（保留现有的URL重写逻辑）
-        let mut modified_request = String::new();
-        let mut is_first_line = true;
-
-        for line in request.lines() {
-            if is_first_line {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let mut path = parts[1].to_string();
-                    if path.contains("/api/admin/") {
-                        path = path.replace("/api/admin/", "/admin/");
-                    }
-                    // 对于WebSocket，需要保留完整的路径
-                    if is_websocket {
-                        // 提取路径部分（去掉协议和主机）
-                        if let Some(slash_pos) = url.find('/') {
-                            path = url[slash_pos..].to_string();
-                        } else {
-                            path = "/".to_string();
-                        }
-                    }
-                    modified_request.push_str(&format!("{} {} {}\r\n", parts[0], path, parts.get(2).unwrap_or(&"HTTP/1.1")));
-                }
-                is_first_line = false;
+        None => (host_port, if is_wss { 443 } else if is_ws { 8000 } else { 80 })
+    };
+    
+    let target_addr = format!("{}:{}", host, port);
+    let proxy_settings = settings.lock().unwrap().clone();
+    
+    match connect_with_proxy_settings(&target_addr, &proxy_settings) {
+        Ok(mut target_stream) => {
+            let timeout = if is_websocket {
+                Duration::from_secs(300)
             } else {
-                // 对于WebSocket，保留所有重要的头部
-                if is_websocket || (!line.to_lowercase().starts_with("accept-encoding:") &&
-                   !line.to_lowercase().starts_with("proxy-connection:")) {
-                    modified_request.push_str(line);
-                    modified_request.push_str("\r\n");
-                }
-            }
+                Duration::from_secs(TIMEOUT)
+            };
+            
+            let _ = target_stream.set_read_timeout(Some(timeout));
+            let _ = target_stream.set_write_timeout(Some(timeout));
+            
+            // 构建并发送修改后的请求
+            let modified_request = modify_request(request, url_without_scheme, host_end, is_websocket)?;
+            target_stream.write_all(modified_request.as_bytes())?;
+            
+            // 转发响应
+            tunnel(client_stream.try_clone()?, target_stream);
+            Ok(())
         }
-        modified_request.push_str("\r\n");
+        Err(e) => {
+            println!("[proxy] 连接失败: {}", e);
+            client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
+            Err(e)
+        }
+    }
+}
 
-        // 发送请求
-        if target_stream.write_all(modified_request.as_bytes()).is_err() {
-            println!("[proxy] 发送请求失败");
-            let _ = client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n");
-            return;
-        }
-
-        // 转发响应
-        if is_websocket {
-            println!("[proxy] 开始WebSocket数据转发");
-        }
-        tunnel(client_stream, target_stream);
-    } 
-    // 相对路径请求
-    else if url.starts_with("/") {
-        let mut target_host = "localhost:1420";
-        for line in request.lines() {
-            if line.to_lowercase().starts_with("host:") {
-                if let Some(colon_pos) = line.find(':') {
-                    let host_value = line[colon_pos + 1..].trim();
-                    if !host_value.is_empty() && !host_value.contains(":8080") {
-                        target_host = host_value;
-                    }
+// 处理相对URL请求
+fn handle_relative_url(
+    client_stream: &mut TcpStream,
+    url: &str,
+    request: &str,
+    _is_websocket: bool
+) -> std::io::Result<()> {
+    let mut target_host = "localhost:1420";
+    
+    // 从请求头中获取Host
+    for line in request.lines() {
+        if line.to_lowercase().starts_with("host:") {
+            if let Some(colon_pos) = line.find(':') {
+                let host_value = line[colon_pos + 1..].trim();
+                if !host_value.is_empty() && !host_value.contains(":8080") {
+                    target_host = host_value;
                     break;
                 }
             }
         }
-        
-        println!("[proxy] 相对路径请求 {} 转发到: {}", url, target_host);
-        if is_websocket {
-            println!("[proxy] 相对路径WebSocket请求");
-        }
-        
-        if let Ok(mut server_stream) = TcpStream::connect(target_host) {
-            // 对于WebSocket连接，使用更长的超时时间
-            let ws_timeout = if is_websocket { Duration::from_secs(300) } else { timeout };
-            let _ = server_stream.set_read_timeout(Some(ws_timeout));
-            let _ = server_stream.set_write_timeout(Some(ws_timeout));
-            let _ = server_stream.write_all(request.as_bytes());
+    }
+    
+    println!("[proxy] 相对路径请求 {} 转发到: {}", url, target_host);
+    
+    match TcpStream::connect(target_host) {
+        Ok(mut server_stream) => {
+            let timeout = if _is_websocket {
+                Duration::from_secs(300)
+            } else {
+                Duration::from_secs(TIMEOUT)
+            };
             
-            if is_websocket {
-                println!("[proxy] 开始相对路径WebSocket数据转发");
-            }
-            tunnel(client_stream, server_stream);
-        } else {
-            println!("[proxy] 连接失败: {}", target_host);
-            let _ = client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n");
+            let _ = server_stream.set_read_timeout(Some(timeout));
+            let _ = server_stream.set_write_timeout(Some(timeout));
+            server_stream.write_all(request.as_bytes())?;
+            
+            tunnel(client_stream.try_clone()?, server_stream);
+            Ok(())
+        }
+        Err(e) => {
+            println!("[proxy] 连接失败: {} - {}", target_host, e);
+            client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
+            Err(e)
         }
     }
+}
+
+// 修改请求头
+fn modify_request(
+    request: &str,
+    url_without_scheme: &str,
+    host_end: usize,
+    _is_websocket: bool, // 添加下划线前缀表示有意未使用
+) -> std::io::Result<String> {
+    let mut modified_request = String::new();
+    let mut is_first_line = true;
+    
+    for line in request.lines() {
+        if is_first_line {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let mut path = parts[1].to_string();
+                if path.contains("/api/admin/") {
+                    path = path.replace("/api/admin/", "/admin/");
+                }
+                
+                if _is_websocket {
+                    if let Some(slash_pos) = url_without_scheme[host_end..].find('/') {
+                        path = url_without_scheme[host_end + slash_pos..].to_string();
+                    } else {
+                        path = "/".to_string();
+                    }
+                }
+                
+                modified_request.push_str(&format!(
+                    "{} {} {}\r\n",
+                    parts[0],
+                    path,
+                    parts.get(2).unwrap_or(&"HTTP/1.1")
+                ));
+            }
+            is_first_line = false;
+        } else {
+            if _is_websocket || (!line.to_lowercase().starts_with("accept-encoding:") &&
+               !line.to_lowercase().starts_with("proxy-connection:")) {
+                modified_request.push_str(line);
+                modified_request.push_str("\r\n");
+            }
+        }
+    }
+    modified_request.push_str("\r\n");
+    
+    Ok(modified_request)
 }
 
 impl ProxyServer {
@@ -759,14 +911,43 @@ impl ProxyServer {
             if let Ok(listener) = TcpListener::bind(&addr) {
                 println!("[proxy] 监听端口: {}", port);
                 let settings_clone = Arc::clone(&settings);
+                
                 thread::spawn(move || {
+                    let mut consecutive_errors = 0;
+                    const MAX_ERRORS: u32 = 5;
+                    
                     for stream in listener.incoming() {
-                        if let Ok(client_stream) = stream {
-                            let settings_clone = Arc::clone(&settings_clone);
-                            thread::spawn(move || handle_client(client_stream, settings_clone));
+                        match stream {
+                            Ok(client_stream) => {
+                                consecutive_errors = 0; // 重置错误计数
+                                let settings_clone = Arc::clone(&settings_clone);
+                                
+                                // 限制最大并发连接数
+                                if thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(4) > 32 {
+                                    println!("[proxy] 警告: 并发连接数过高");
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                    continue;
+                                }
+                                
+                                thread::spawn(move || {
+                                    let _ = client_stream.set_nodelay(true); // 优化网络性能
+                                    handle_client(client_stream, settings_clone);
+                                });
+                            }
+                            Err(e) => {
+                                consecutive_errors += 1;
+                                println!("[proxy] 接受连接错误: {}", e);
+                                
+                                if consecutive_errors >= MAX_ERRORS {
+                                    println!("[proxy] 连续错误过多，暂停接受新连接");
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+                                    consecutive_errors = 0;
+                                }
+                            }
                         }
                     }
                 });
+                
                 return Some(ProxyServer { port, settings });
             }
         }

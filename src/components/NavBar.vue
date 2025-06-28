@@ -169,7 +169,10 @@ const proxyStatusText = computed(() => {
   
   switch (proxyStore.config.type) {
     case 'none': return '禁用';
-    case 'system': return '系统代理';
+    case 'system': {
+      const systemProxyEnabled = proxyStore.systemProxyInfo?.proxy_enabled;
+      return `系统代理${systemProxyEnabled ? '' : '(未设置)'}`;
+    }
     case 'manual': return `手动 (${proxyStore.config.httpProxy || proxyStore.config.httpsProxy || proxyStore.config.socksProxy})`;
     default: return '未知';
   }

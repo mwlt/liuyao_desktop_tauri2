@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, watch, computed, readonly } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import type { ProxySettings } from '../types/wails';
+import type { ProxySettings, SystemProxyInfo } from '../types/wails';
 
 export type ProxyType = 'none' | 'system' | 'manual';
 
@@ -21,13 +21,6 @@ const defaultConfig: ProxyConfig = {
   socksProxy: ''
 };
 
-interface TestResult {
-  proxy_available: boolean;
-  core333_accessible: boolean;
-  google_accessible: boolean;
-  message: string;
-}
-
 export const useProxyStore = defineStore('proxy', () => {
   const config = ref<ProxyConfig>({ ...defaultConfig });
   const isLoading = ref(false);
@@ -39,6 +32,9 @@ export const useProxyStore = defineStore('proxy', () => {
   
   // 当前代理设置（来自Rust后端）
   const currentProxySettings = ref<ProxySettings | null>(null);
+
+  // 系统代理信息
+  const systemProxyInfo = ref<SystemProxyInfo | null>(null);
 
   // 获取本地代理端口
   async function initLocalProxyPort(retry = 3) {
@@ -168,6 +164,19 @@ export const useProxyStore = defineStore('proxy', () => {
     { deep: true }
   );
 
+  // 获取系统代理信息
+  async function refreshSystemProxyInfo() {
+    try {
+      const info = await invoke<SystemProxyInfo>('get_system_proxy_info');
+      systemProxyInfo.value = info;
+      return info;
+    } catch (e) {
+      console.error('[ProxyStore] ❌ 获取系统代理信息失败:', e);
+      error.value = `获取系统代理信息失败: ${e}`;
+      return null;
+    }
+  }
+
   // 设置代理类型
   async function setType(type: ProxyType) {
     config.value.type = type;
@@ -186,11 +195,18 @@ export const useProxyStore = defineStore('proxy', () => {
       if (type === 'none') {
         await clearAll();
       }
-      // 如果是系统代理，自动应用系统代理设置
+      // 如果是系统代理，获取并检查系统代理状态
       else if (type === 'system') {
-        const result = await applySystemProxy();
-        if (!result.success) {
-          error.value = result.message;
+        const sysProxyInfo = await refreshSystemProxyInfo();
+        if (!sysProxyInfo?.proxy_enabled) {
+          // 如果系统代理未启用，设置为直连模式
+          await invoke('set_proxy_type', { proxyType: 'None' });
+          console.log('[ProxyStore] ⚠️ 系统代理未启用，使用直连模式');
+        } else {
+          const result = await applySystemProxy();
+          if (!result.success) {
+            error.value = result.message;
+          }
         }
       }
       
@@ -199,7 +215,7 @@ export const useProxyStore = defineStore('proxy', () => {
     } catch (e) {
       console.error('[ProxyStore] ❌ 设置代理类型失败:', e);
       error.value = `设置代理类型失败: ${e}`;
-      throw e; // 重新抛出错误，让调用者知道发生了错误
+      throw e;
     }
   }
 
@@ -274,52 +290,66 @@ export const useProxyStore = defineStore('proxy', () => {
     return { valid: true, message: '代理地址格式正确', formatted };
     }
     
-  // 更新：测试代理连接
-  async function testProxyConnectivity(proxyUrl: string): Promise<{ success: boolean; message: string; details?: TestResult }> {
+  // 测试代理连接性
+  async function testProxyConnectivity(proxyUrl: string) {
+    interface TestResult {
+      proxy_available: boolean;
+      core333_accessible: boolean;
+      google_accessible: boolean;
+      message: string;
+    }
+
     try {
-      console.log('[ProxyStore] 开始测试代理连接:', proxyUrl);
-      
       const result = await invoke<TestResult>('test_proxy_connectivity', { proxyUrl });
-      
-      if (result.proxy_available) {
-        console.log('[ProxyStore] ✅ 代理连接测试结果:', result);
-        return { 
-          success: true, 
-          message: '代理连接测试完成', 
-          details: result 
-        };
-      } else {
-        console.log('[ProxyStore] ❌ 代理连接测试失败:', result);
-        return { 
-          success: false, 
-          message: result.message,
-          details: result 
-        };
-      }
+      return result;
     } catch (e) {
-      console.error('[ProxyStore] ❌ 代理连接测试异常:', e);
-      return { 
-        success: false, 
-        message: `测试失败: ${e}` 
+      console.error('[ProxyStore] ❌ 测试代理连接失败:', e);
+      return {
+        proxy_available: false,
+        core333_accessible: false,
+        google_accessible: false,
+        message: `测试失败: ${e}`
       };
     }
   }
 
-  // 新增：应用系统代理设置
+  // 应用系统代理设置
   async function applySystemProxy(): Promise<{ success: boolean; message: string }> {
     try {
-      console.log('[ProxyStore] 开始应用系统代理设置');
+      // 先获取最新的系统代理信息
+      const sysProxyInfo = await refreshSystemProxyInfo();
       
+      // 如果系统代理未启用，保持系统代理类型但清除代理地址
+      if (!sysProxyInfo?.proxy_enabled) {
+        console.log('[ProxyStore] ⚠️ 系统代理未启用');
+        // 清除代理地址但保持类型为系统代理
+        if (currentProxySettings.value) {
+          currentProxySettings.value.http_proxy = undefined;
+          currentProxySettings.value.https_proxy = undefined;
+          currentProxySettings.value.socks5_proxy = undefined;
+          await updateBackendProxySettings();
+        }
+        return {
+          success: false,
+          message: '系统代理未启用，暂时使用直连模式'
+        };
+      }
+
+      // 应用系统代理设置
       await invoke('apply_system_proxy');
+      console.log('[ProxyStore] ✅ 系统代理设置已应用');
       
-      // 重新加载设置以同步前端状态
-      await loadProxySettings();
-      
-      console.log('[ProxyStore] ✅ 系统代理设置应用成功');
-      return { success: true, message: '系统代理设置应用成功' };
+      return {
+        success: true,
+        message: '系统代理设置已应用'
+      };
     } catch (e) {
       console.error('[ProxyStore] ❌ 应用系统代理设置失败:', e);
-      return { success: false, message: `应用失败: ${e}` };
+      error.value = `应用系统代理设置失败: ${e}`;
+      return {
+        success: false,
+        message: `应用系统代理设置失败: ${e}`
+      };
     }
   }
   
@@ -370,7 +400,7 @@ export const useProxyStore = defineStore('proxy', () => {
       // 先测试代理连接
       console.log('[ProxyStore] 测试代理连接...');
       const testResult = await testProxyConnectivity(formattedAddress);
-      if (!testResult.success) {
+      if (!testResult.proxy_available) {
         error.value = `代理不可用: ${testResult.message}`;
         return false;
       }
@@ -448,6 +478,7 @@ export const useProxyStore = defineStore('proxy', () => {
     isInitialized: readonly(isInitialized),
     localProxyPort: readonly(localProxyPort),
     currentProxySettings: readonly(currentProxySettings),
+    systemProxyInfo: readonly(systemProxyInfo),
     
     // 计算属性
     hasProxyConfig,
@@ -469,5 +500,6 @@ export const useProxyStore = defineStore('proxy', () => {
     applySystemProxy,
     applyManualProxy,
     getProxyStatus,
+    refreshSystemProxyInfo
   };
 }); 

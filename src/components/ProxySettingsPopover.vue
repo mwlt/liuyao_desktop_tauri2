@@ -30,7 +30,9 @@
             clearable
             :status="httpProxyValidation.status"
             @input="debouncedValidateHttpProxy(httpProxy)"
-          />
+          >
+            <template #password-invisible-icon></template>
+          </n-input>
           <n-button 
             size="small" 
             @click="applyToAll(httpProxy, 'http')"
@@ -129,56 +131,39 @@
       <div class="system-proxy-header">
         <h4>系统代理信息</h4>
         <div class="system-proxy-actions">
-        <n-button size="tiny" @click="refreshSystemProxy" :loading="loadingSystemProxy" quaternary>
-          刷新
-        </n-button>
-          <!-- <n-button 
-            size="tiny" 
-            @click="applySystemProxySettings" 
-            :loading="loadingSystemProxy"
-            :disabled="!systemProxyInfo.proxy_enabled"
-            type="primary"
-          >
-            应用
-          </n-button> -->
+          <n-button size="tiny" @click="refreshAndApplySystemProxyInfo" :loading="loadingSystemProxy" quaternary>
+            刷新并应用
+          </n-button>
         </div>
       </div>
-      
-      <div v-if="systemProxyInfo" class="system-proxy-info">
+
+      <div v-if="loadingSystemProxy" class="loading-info">
+        正在获取系统代理信息...
+      </div>
+      <div v-else-if="!systemProxyInfo.proxy_enabled" class="empty-proxy-info">
+        <small>未设置操作系统代理，使用直连模式。开启操作系统代理后再次进入此页面可以自动应用系统代理。</small>
+      </div>
+      <div v-else class="system-proxy-info">
         <div class="proxy-info-item">
           <span class="proxy-label">HTTP代理:</span>
-          <span class="proxy-value">{{ systemProxyInfo.http_proxy }}</span>
+          <span class="proxy-value">{{ systemProxyInfo.http_proxy || '未设置' }}</span>
         </div>
         <div class="proxy-info-item">
           <span class="proxy-label">HTTPS代理:</span>
-          <span class="proxy-value">{{ systemProxyInfo.https_proxy }}</span>
+          <span class="proxy-value">{{ systemProxyInfo.https_proxy || '未设置' }}</span>
         </div>
         <div class="proxy-info-item">
           <span class="proxy-label">SOCKS代理:</span>
-          <span class="proxy-value">{{ systemProxyInfo.socks_proxy }}</span>
+          <span class="proxy-value">{{ systemProxyInfo.socks_proxy || '未设置' }}</span>
         </div>
         <div class="proxy-info-item">
           <span class="proxy-label">FTP代理:</span>
-          <span class="proxy-value">{{ systemProxyInfo.ftp_proxy }}</span>
+          <span class="proxy-value">{{ systemProxyInfo.ftp_proxy || '未设置' }}</span>
         </div>
         <div v-if="systemProxyInfo.no_proxy" class="proxy-info-item">
           <span class="proxy-label">代理例外:</span>
-          <span class="proxy-value no-proxy">{{ systemProxyInfo.no_proxy }}</span>
+          <span class="proxy-value">{{ systemProxyInfo.no_proxy }}</span>
         </div>
-        <div class="proxy-status-item">
-          <span class="proxy-label">状态:</span>
-          <span class="proxy-status" :class="{ enabled: systemProxyInfo.proxy_enabled }">
-            {{ systemProxyInfo.proxy_enabled ? '已启用' : '未启用' }}
-          </span>
-        </div>
-      </div>
-      
-      <div v-else-if="loadingSystemProxy" class="loading-info">
-        <span>正在获取系统代理信息...</span>
-      </div>
-      
-      <div v-else class="no-proxy-info">
-        <span>无法获取系统代理信息</span>
       </div>
     </div>
 
@@ -264,8 +249,30 @@ import {
 import { useProxyStore } from '../store/useProxyStore';
 import { invoke } from '@tauri-apps/api/core';
 
-import type { SystemProxyInfo } from '../types/proxy';
+import type { SystemProxyInfo, TestResult } from '../types/proxy';
 import { InformationCircleOutline,PlanetOutline } from '@vicons/ionicons5';
+
+ 
+const refreshAndApplySystemProxyInfo = async () => {
+ 
+  try {
+    loadingSystemProxy.value = true;
+    const proxyInfo = await invoke('get_system_proxy_info');
+    systemProxyInfo.value = proxyInfo as SystemProxyInfo;
+    
+    console.log('[ProxySettings] 系统代理信息:', proxyInfo);
+  if(proxyInfo){
+await applySystemProxySettings();
+  }
+
+  } catch (error) {
+    console.error('获取系统代理信息失败:', error);
+  } finally {
+    loadingSystemProxy.value = false;
+  }
+
+}
+
 
 const proxyStore = useProxyStore();
 const loading = ref(false);
@@ -477,28 +484,20 @@ const applySystemProxySettings = async () => {
   }
 };
 
-// 新增：测试单个代理
-const testSingleProxy = async (proxyUrl: string, proxyName: string) => {
-  if (!proxyUrl) {
-    return {
-      success: false,
-      message: `${proxyName}代理地址为空`
-    };
-  }
-  
+// 测试单个代理
+async function testSingleProxy(proxyUrl: string, proxyName: string): Promise<TestResult> {
   try {
-    testingConnection.value = true;
-    resultMessage.value = `正在测试${proxyName}代理...`;
-    resultType.value = 'info';
-    
     return await proxyStore.testProxyConnectivity(proxyUrl);
-  } catch (error) {
+  } catch (e) {
+    console.error(`测试${proxyName}代理失败:`, e);
     return {
-      success: false,
-      message: `${proxyName}代理测试异常: ${error}`
+      proxy_available: false,
+      core333_accessible: false,
+      google_accessible: false,
+      message: `测试${proxyName}代理失败: ${e}`
     };
   }
-};
+}
 
 // 重置测试结果
 function resetTestResult() {
@@ -524,67 +523,67 @@ async function testConnection() {
     if (proxyType.value === 'none') {
       // 在禁用代理模式下直接测试网站可访问性
       const testResult = await proxyStore.testProxyConnectivity('direct://');
-      if (testResult.details) {
-        proxyTestResllt.value = `直连测试结果：
-- core333.com: ${testResult.details.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
-- google.com: ${testResult.details.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
-        
-        resultType.value = testResult.details.core333_accessible || testResult.details.google_accessible ? 'success' : 'error';
-      }
+      proxyTestResllt.value = `直连测试结果：
+- core333.com: ${testResult.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
+- google.com: ${testResult.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
+      
+      resultType.value = testResult.core333_accessible || testResult.google_accessible ? 'success' : 'error';
     } else if (proxyType.value === 'system') {
       // 测试系统代理
-      if (systemProxyInfo.value.proxy_enabled) {
-        const proxies = [
-          { url: systemProxyInfo.value.http_proxy, name: 'HTTP' },
-          { url: systemProxyInfo.value.https_proxy, name: 'HTTPS' },
-          { url: systemProxyInfo.value.socks_proxy, name: 'SOCKS' }
-        ].filter(p => p.url);
-        
-        if (proxies.length > 0) {
-          const proxy = proxies[0]; // 测试第一个可用的代理
-          proxyTestResllt.value = `正在测试系统${proxy.name}代理...`;
-          const testResult = await testSingleProxy(proxy.url, `系统${proxy.name}`);
-          if (testResult.details) {
-            proxyTestResllt.value = `代理测试结果：
-- 代理服务器: ${testResult.details.proxy_available ? '✅ 可用' : '❌ 不可用'}
-- core333.com: ${testResult.details.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
-- google.com: ${testResult.details.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
-            
-            // 根据测试结果设置状态
-            if (testResult.details.proxy_available && 
-               (testResult.details.core333_accessible || testResult.details.google_accessible)) {
-        resultType.value = 'success';
-      } else {
-              resultType.value = 'error';
-            }
-          }
-        } else {
-          proxyTestResllt.value = '系统代理已启用但未配置具体地址';
-          resultType.value = 'error';
-        }
-      } else {
-        proxyTestResllt.value = '系统代理未启用';
-        resultType.value = 'error';
+      const sysProxyInfo = await proxyStore.refreshSystemProxyInfo();
+      if (!sysProxyInfo?.proxy_enabled) {
+        proxyTestResllt.value = '系统代理未启用，使用直连模式';
+        resultType.value = 'info';
+        return;
       }
-    } else {
+
+      const proxies = [
+        { url: sysProxyInfo.http_proxy, name: 'HTTP' },
+        { url: sysProxyInfo.https_proxy, name: 'HTTPS' },
+        { url: sysProxyInfo.socks_proxy, name: 'SOCKS' }
+      ].filter(p => p.url);
+      
+      if (proxies.length > 0) {
+        const proxy = proxies[0]; // 测试第一个可用的代理
+        proxyTestResllt.value = `正在测试系统${proxy.name}代理...`;
+        const testResult = await proxyStore.testProxyConnectivity(proxy.url);
+        
+        if (!testResult.proxy_available) {
+          proxyTestResllt.value = testResult.message;
+          resultType.value = 'info';
+          // 刷新系统代理信息显示
+          await refreshSystemProxy();
+          return;
+        }
+
+        proxyTestResllt.value = `代理测试结果：
+- 代理服务器: ${testResult.proxy_available ? '✅ 可用' : '❌ 不可用'}
+- core333.com: ${testResult.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
+- google.com: ${testResult.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
+        
+        resultType.value = testResult.proxy_available && 
+          (testResult.core333_accessible || testResult.google_accessible) ? 'success' : 'error';
+      } else {
+        proxyTestResllt.value = '系统未配置任何代理服务器';
+        resultType.value = 'info';
+      }
+    } else if (proxyType.value === 'manual') {
       // 测试手动代理
       const proxy = getActiveProxy();
       if (proxy) {
         proxyTestResllt.value = `正在测试${proxy.name}代理...`;
         const testResult = await testSingleProxy(proxy.url, proxy.name);
-        if (testResult.details) {
-          proxyTestResllt.value = `代理测试结果：
-- 代理服务器: ${testResult.details.proxy_available ? '✅ 可用' : '❌ 不可用'}
-- core333.com: ${testResult.details.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
-- google.com: ${testResult.details.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
-          
-          // 根据测试结果设置状态
-          if (testResult.details.proxy_available && 
-             (testResult.details.core333_accessible || testResult.details.google_accessible)) {
-            resultType.value = 'success';
-          } else {
-            resultType.value = 'error';
-          }
+        proxyTestResllt.value = `代理测试结果：
+- 代理服务器: ${testResult.proxy_available ? '✅ 可用' : '❌ 不可用'}
+- core333.com: ${testResult.core333_accessible ? '✅ 可访问' : '❌ 不可访问'}
+- google.com: ${testResult.google_accessible ? '✅ 可访问' : '❌ 不可访问'}`;
+        
+        // 根据测试结果设置状态
+        if (testResult.proxy_available && 
+           (testResult.core333_accessible || testResult.google_accessible)) {
+          resultType.value = 'success';
+        } else {
+          resultType.value = 'error';
         }
       } else {
         proxyTestResllt.value = '未配置任何手动代理';
@@ -613,14 +612,12 @@ async function testConnection() {
 // }
 
 // 每次弹窗显示时都初始化
-const popoverVisible = ref(false);
-watch(popoverVisible, (val) => {
-  if (val) proxyStore.initialize();
-});
 
-onMounted(() => {
-  proxyStore.initialize();
-  refreshSystemProxy();
+
+
+onMounted(async () => {
+  await proxyStore.initialize();
+  await refreshSystemProxy();
 });
 
 watch(proxyType, () => {
@@ -825,6 +822,32 @@ async function toggleProxy() {
 .proxy-status.enabled {
   background: #e8f5e8;
   color: #2e7d32;
+}
+
+.proxy-tip {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f0f8ff;
+  border: 1px solid #b3d9ff;
+  border-radius: 4px;
+}
+
+.proxy-tip small {
+  color: #1976d2;
+  line-height: 1.4;
+}
+
+.empty-proxy-info {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.empty-proxy-info small {
+  color: #666;
+  line-height: 1.4;
 }
 
 .loading-info {
