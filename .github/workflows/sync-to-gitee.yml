@@ -21,6 +21,7 @@ jobs:
         with:
           src: github/mwlt
           dst: gitee/mwlt
+          src_token: ${{ secrets.GH_PAT }}
           dst_token: ${{ secrets.GITEE_TOKEN }}
           account_type: user
           force_update: true

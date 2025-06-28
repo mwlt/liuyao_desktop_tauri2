@@ -1,3 +1,11 @@
+<!--
+ * @Author: mwlt_sanodia mwlt@163.com
+ * @Date: 2025-06-28 20:35:08
+ * @LastEditors: mwlt_sanodia mwlt@163.com
+ * @LastEditTime: 2025-06-29 07:34:50
+ * @FilePath: \liuyao_desktop_tauri\release_steps.md
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+-->
 # GitHub Release 发布步骤
 
 ## 1. 版本号更新

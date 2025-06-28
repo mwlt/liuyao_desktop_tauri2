@@ -162,30 +162,30 @@ mod linux_proxy {
     }
 
     pub fn get_env_proxy() -> SystemProxyInfo {
-        let mut proxy_info = SystemProxyInfo::default();
-        
-        // 从环境变量读取代理设置
-        if let Ok(http_proxy) = env::var("http_proxy").or_else(|_| env::var("HTTP_PROXY")) {
-            proxy_info.http_proxy = http_proxy;
-            proxy_info.proxy_enabled = true;
-        }
-        
-        if let Ok(https_proxy) = env::var("https_proxy").or_else(|_| env::var("HTTPS_PROXY")) {
-            proxy_info.https_proxy = https_proxy;
-        }
-        
-        if let Ok(ftp_proxy) = env::var("ftp_proxy").or_else(|_| env::var("FTP_PROXY")) {
-            proxy_info.ftp_proxy = ftp_proxy;
-        }
-        
-        if let Ok(socks_proxy) = env::var("socks_proxy").or_else(|_| env::var("SOCKS_PROXY")) {
-            proxy_info.socks_proxy = socks_proxy;
-        }
-        
-        if let Ok(no_proxy) = env::var("no_proxy").or_else(|_| env::var("NO_PROXY")) {
-            proxy_info.no_proxy = no_proxy;
-        }
-        
+    let mut proxy_info = SystemProxyInfo::default();
+    
+    // 从环境变量读取代理设置
+    if let Ok(http_proxy) = env::var("http_proxy").or_else(|_| env::var("HTTP_PROXY")) {
+        proxy_info.http_proxy = http_proxy;
+        proxy_info.proxy_enabled = true;
+    }
+    
+    if let Ok(https_proxy) = env::var("https_proxy").or_else(|_| env::var("HTTPS_PROXY")) {
+        proxy_info.https_proxy = https_proxy;
+    }
+    
+    if let Ok(ftp_proxy) = env::var("ftp_proxy").or_else(|_| env::var("FTP_PROXY")) {
+        proxy_info.ftp_proxy = ftp_proxy;
+    }
+    
+    if let Ok(socks_proxy) = env::var("socks_proxy").or_else(|_| env::var("SOCKS_PROXY")) {
+        proxy_info.socks_proxy = socks_proxy;
+    }
+    
+    if let Ok(no_proxy) = env::var("no_proxy").or_else(|_| env::var("NO_PROXY")) {
+        proxy_info.no_proxy = no_proxy;
+    }
+    
         proxy_info
     }
 
@@ -368,7 +368,7 @@ pub fn get_system_proxy() -> SystemProxyInfo {
     }
     
     if proxy_info.proxy_enabled {
-        proxy_info
+    proxy_info
     } else {
         SystemProxyInfo::default()
     }
