@@ -140,31 +140,8 @@ jobs:
         with:
           args: ${{ matrix.rust-target != '' && format('--target {0}', matrix.rust-target) || '' }}
           tagName: ${{ github.ref_name }}
-          releaseName: 'liuyao_desktop_${{ github.ref_name }}'
-          releaseBody: |
-            ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
-
-            ### 📦 支持平台
-            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
-            - **macOS**: Intel 专用版、Apple Silicon 专用版、通用版本 (DMG格式)
-            - **Linux**: DEB包、RPM包、AppImage 便携版
-
-            ### 📋 更新内容
-            请查看 [CHANGELOG.md](https://github.com/mwlt/liuyao_desktop_tauri2/blob/main/CHANGELOG.md) 了解详细更新内容。
-
-            ### 🔽 下载说明
-            - **Windows 用户**: 
-              - 安装版：下载 `.msi` 或 `.exe` 文件
-              - 便携版：下载 `.zip` 文件
-            - **macOS 用户**: 
-              - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
-              - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
-              - 通用版本: 下载包含 `universal` 的 `.dmg` 文件（推荐）
-            - **Linux 用户**: 
-              - Ubuntu/Debian: 下载 `.deb` 文件
-              - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
-              - 其他发行版: 下载 `.AppImage` 文件
-
+          releaseName: '六爻排盘与研究 v${{ github.ref_name }}'
+          releaseBody: '六爻排盘与研究 ${{ github.ref_name }} 发布 - 支持 Windows、macOS、Linux 多平台'
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: false
