@@ -10,7 +10,7 @@
   },
   "app": {
     "windows": [{
-      "title": "六爻排盘与研究 v2.6.6",
+      "title": "六爻排盘与研究 v2.6.8",
       "width": 1600,
       "height": 1200,
       "minWidth": 1200,
@@ -54,8 +54,7 @@
       "signingIdentity": null,
       "providerShortName": null,
       "entitlements": null,
-      "hardenedRuntime": true,
-      "universal": true
+      "hardenedRuntime": true
     },
     "linux": {
       "deb": {
@@ -64,32 +63,25 @@
           "libgtk-3-0",
           "libayatana-appindicator3-1"
         ],
-        "section": "utils",
-        "priority": "optional",
-        "changelog": "debian/changelog"
+        "priority": "optional"
       },
       "appimage": {
-        "bundleMediaFramework": true,
-        "args": []
+        "bundleMediaFramework": true
       },
       "rpm": {
         "epoch": 0,
-        "release": "1",
-        "section": "Applications/System",
-        "requires": [
-          "webkit2gtk4.1",
-          "gtk3",
-          "libayatana-appindicator-gtk3"
-        ]
+        "release": "1"
       }
     }
   },
-  "updater": {
-    "active": true,
-    "endpoints": [
-      "https://github.com/mwlt/liuyao_desktop_tauri2/releases/latest/download/latest.json"
-    ],
-    "dialog": true,
-    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMEI0Q0YxNzNCOTAyRjgKUldUZ3lKUXRWaEUvb0NhRm01RHNhWlRHRTlrVzVkMXBVbDBrNGdLY3o4Y053PT0K"
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/mwlt/liuyao_desktop_tauri2/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMEI0Q0YxNzNCOTAyRjgKUldUZ3lKUXRWaEUvb0NhRm01RHNhWlRHRTlrVzVkMXBVbDBrNGdLY3o4Y053PT0K"
+    }
   }
 }
