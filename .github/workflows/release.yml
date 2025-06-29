@@ -35,7 +35,7 @@ jobs:
           - platform: macos-latest
             os: macos
             arch: universal
-            rust-target: universal-apple-darwin
+            rust-target: ""
             name-suffix: "_universal"
           
           # Linux 版本
@@ -89,7 +89,6 @@ jobs:
           targets: |
             aarch64-apple-darwin
             x86_64-apple-darwin
-            universal-apple-darwin
             x86_64-unknown-linux-gnu
             i686-unknown-linux-gnu
             aarch64-unknown-linux-gnu
@@ -126,8 +125,7 @@ jobs:
       - name: Setup macOS Universal Binary (macOS Universal only)
         if: matrix.arch == 'universal'
         run: |
-          echo "ENABLE_UNIVERSAL_BINARY=true" >> $GITHUB_ENV
-          echo "TAURI_UNIVERSAL_BINARY=true" >> $GITHUB_ENV
+          echo "Building macOS Universal Binary"
           # 确保 Rust 目标已安装
           rustup target add aarch64-apple-darwin
           rustup target add x86_64-apple-darwin
@@ -140,7 +138,7 @@ jobs:
           # 如需启用代码签名，请在 GitHub Secrets 中配置相应证书
           ENABLE_CODE_SIGNING: false
         with:
-          args: ${{ matrix.arch == 'universal' && '--target universal-apple-darwin' || format('--target {0}', matrix.rust-target) }}
+          args: ${{ matrix.arch == 'universal' && '' || format('--target {0}', matrix.rust-target) }}
           tagName: ${{ github.ref_name }}
           releaseName: 'liuyao_desktop_${{ github.ref_name }}'
           releaseBody: |
