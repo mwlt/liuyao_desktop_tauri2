@@ -54,7 +54,10 @@
       "signingIdentity": null,
       "providerShortName": null,
       "entitlements": null,
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "appfile": {
+        "name": "六爻排盘与研究_${version}_${arch}"
+      }
     },
     "linux": {
       "deb": {
@@ -63,14 +66,23 @@
           "libgtk-3-0",
           "libayatana-appindicator3-1"
         ],
-        "priority": "optional"
+        "priority": "optional",
+        "files": {
+          "name": "六爻排盘与研究_${version}_${arch}"
+        }
       },
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": true,
+        "files": {
+          "name": "六爻排盘与研究_${version}_${arch}"
+        }
       },
       "rpm": {
         "epoch": 0,
-        "release": "1"
+        "release": "1",
+        "files": {
+          "name": "六爻排盘与研究_${version}_${arch}"
+        }
       }
     }
   }
