@@ -187,12 +187,8 @@ jobs:
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/portable/*.zip' || '' }}
             ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/dmg/*{0}.dmg', matrix.name-suffix) || '' }}
             ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/macos/*{0}.app.tar.gz', matrix.name-suffix) || '' }}
-          tag_name: ${{ github.ref_name }}
-          name: liuyao_desktop_${{ github.ref_name }}${{ matrix.name-suffix }}
-          body: |
-            构建平台: ${{ matrix.platform }}
-            架构: ${{ matrix.arch }}
-            构建目标: ${{ matrix.rust-target }}
+          tag_name: ${{ github.ref_name }}_${{ matrix.os }}_${{ matrix.arch }}
+          name: liuyao_desktop_${{ github.ref_name }}_${{ matrix.os }}_${{ matrix.arch }}
           draft: true
           prerelease: false
           make_latest: true
