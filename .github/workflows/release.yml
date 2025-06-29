@@ -33,6 +33,7 @@ jobs:
             arch: x86_64
             rust-target: x86_64-apple-darwin
             name-suffix: "_intel"
+            build-args: "--target x86_64-apple-darwin"
 
           # macOS Apple Silicon 版本
           - platform: macos-latest
@@ -40,6 +41,7 @@ jobs:
             arch: aarch64
             rust-target: aarch64-apple-darwin
             name-suffix: "_apple_silicon"
+            build-args: "--target aarch64-apple-darwin"
 
           # macOS 通用版本 (Universal Binary)
           - platform: macos-latest
@@ -47,6 +49,7 @@ jobs:
             arch: universal
             rust-target: ""
             name-suffix: "_universal"
+            build-args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -98,9 +101,12 @@ jobs:
       # 第一步：只构建，不上传
       - name: Build Tauri app (build only)
         run: |
-          if [ "${{ matrix.rust-target }}" != "" ]; then
-            pnpm tauri build --target ${{ matrix.rust-target }}
+          echo "开始构建 ${{ matrix.os }} ${{ matrix.arch }} 版本..."
+          if [ "${{ matrix.build-args }}" != "" ]; then
+            echo "使用构建参数: ${{ matrix.build-args }}"
+            pnpm tauri build ${{ matrix.build-args }}
           else
+            echo "使用默认构建参数"
             pnpm tauri build
           fi
         shell: bash
@@ -110,211 +116,138 @@ jobs:
         shell: bash
         run: |
           echo "🔄 开始重命名 ${{ matrix.os }} 构建产物..."
-          echo "🔍 调试信息:"
-          echo "  matrix.os: ${{ matrix.os }}"
-          echo "  matrix.arch: ${{ matrix.arch }}"
-          echo "  matrix.name-suffix: ${{ matrix.name-suffix }}"
-          echo "  matrix.rust-target: ${{ matrix.rust-target }}"
+          
+          # 提取版本号
+          version="${GITHUB_REF#refs/tags/}"
+          version="${version#v}"
+          echo "📌 版本号: $version"
           
           # 设置操作系统标识
           case "${{ matrix.os }}" in
             "macos")
-              os_suffix="_macos"
+              os_suffix="macos"
               ;;
             "windows")
-              os_suffix="_windows"
+              os_suffix="windows"
               ;;
             "linux")
-              os_suffix="_linux"
-              ;;
-            *)
-              os_suffix="_${{ matrix.os }}"
+              os_suffix="linux"
               ;;
           esac
           
-          # 组合完整后缀：操作系统 + 架构
-          if [ "${{ matrix.name-suffix }}" != "" ]; then
-            full_suffix="${os_suffix}${{ matrix.name-suffix }}"
-          else
-            full_suffix="${os_suffix}_${{ matrix.arch }}"
-          fi
-          
-          echo "📝 使用后缀: $full_suffix"
-          
-          # macOS 文件重命名
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            # 处理 DMG 文件
-            dmg_dir="src-tauri/target/release/bundle/dmg"
-            if [ -d "$dmg_dir" ]; then
-              cd "$dmg_dir"
-              echo "📁 DMG 目录: $(pwd)"
-              echo "📋 DMG 构建前文件列表:"
-              ls -la *.dmg 2>/dev/null || echo "未找到 DMG 文件"
-              
-              for file in *.dmg; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
-                  mv "$file" "$new_name"
-                  echo "✅ DMG 重命名: $file -> $new_name"
-                fi
-              done
-              
-              echo "📋 DMG 重命名后文件列表:"
-              ls -la *.dmg 2>/dev/null || echo "未找到 DMG 文件"
-              cd - > /dev/null
-            fi
-            
-            # 处理 APP 文件
-            app_dir="src-tauri/target/release/bundle/macos"
-            if [ -d "$app_dir" ]; then
-              cd "$app_dir"
-              echo "📁 APP 目录: $(pwd)"
-              echo "📋 APP 构建前文件列表:"
-              ls -la *.app* 2>/dev/null || echo "未找到 APP 文件"
-              
-              for file in *.app*; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  if [[ "$file" == *.app.tar.gz ]]; then
-                    base_name="${file%.app.tar.gz}"
-                    new_name="${base_name}${full_suffix}.app.tar.gz"
-                  elif [[ "$file" == *.app ]]; then
-                    base_name="${file%.app}"
-                    new_name="${base_name}${full_suffix}.app"
-                  else
-                    base_name="${file%.*}"
-                    extension="${file##*.}"
-                    new_name="${base_name}${full_suffix}.${extension}"
-                  fi
-                  mv "$file" "$new_name"
-                  echo "✅ APP 重命名: $file -> $new_name"
-                fi
-              done
-              
-              echo "📋 APP 重命名后文件列表:"
-              ls -la *.app* 2>/dev/null || echo "未找到 APP 文件"
-              cd - > /dev/null
-            fi
-          fi
+          # 完整的文件名前缀
+          name_prefix="liuyao-desktop_${version}_${os_suffix}"
+          echo "📝 文件名前缀: $name_prefix"
           
           # Windows 文件重命名
           if [ "${{ matrix.os }}" = "windows" ]; then
-            # 处理 MSI 文件
-            msi_dir="src-tauri/target/release/bundle/msi"
-            if [ -d "$msi_dir" ]; then
-              cd "$msi_dir"
-              echo "📁 MSI 目录: $(pwd)"
-              echo "📋 MSI 构建前文件列表:"
-              ls -la *.msi 2>/dev/null || echo "未找到 MSI 文件"
-              
+            # MSI 文件
+            if [ -d "src-tauri/target/release/bundle/msi" ]; then
+              cd "src-tauri/target/release/bundle/msi"
               for file in *.msi; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.msi"
                   mv "$file" "$new_name"
                   echo "✅ MSI 重命名: $file -> $new_name"
                 fi
               done
-              
-              echo "📋 MSI 重命名后文件列表:"
-              ls -la *.msi 2>/dev/null || echo "未找到 MSI 文件"
               cd - > /dev/null
             fi
             
-            # 处理 NSIS 文件
-            nsis_dir="src-tauri/target/release/bundle/nsis"
-            if [ -d "$nsis_dir" ]; then
-              cd "$nsis_dir"
-              echo "📁 NSIS 目录: $(pwd)"
-              echo "📋 NSIS 构建前文件列表:"
-              ls -la *.exe 2>/dev/null || echo "未找到 EXE 文件"
-              
+            # NSIS 文件
+            if [ -d "src-tauri/target/release/bundle/nsis" ]; then
+              cd "src-tauri/target/release/bundle/nsis"
               for file in *.exe; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.exe"
                   mv "$file" "$new_name"
-                  echo "✅ NSIS 重命名: $file -> $new_name"
+                  echo "✅ EXE 重命名: $file -> $new_name"
                 fi
               done
-              
-              echo "📋 NSIS 重命名后文件列表:"
-              ls -la *.exe 2>/dev/null || echo "未找到 EXE 文件"
+              cd - > /dev/null
+            fi
+            
+            # 便携版
+            if [ -d "src-tauri/target/portable" ]; then
+              cd "src-tauri/target/portable"
+              for file in *.zip; do
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.zip"
+                  mv "$file" "$new_name"
+                  echo "✅ ZIP 重命名: $file -> $new_name"
+                fi
+              done
               cd - > /dev/null
             fi
           fi
           
           # Linux 文件重命名
           if [ "${{ matrix.os }}" = "linux" ]; then
-            # 处理 DEB 文件
-            deb_dir="src-tauri/target/release/bundle/deb"
-            if [ -d "$deb_dir" ]; then
-              cd "$deb_dir"
-              echo "📁 DEB 目录: $(pwd)"
-              echo "📋 DEB 构建前文件列表:"
-              ls -la *.deb 2>/dev/null || echo "未找到 DEB 文件"
-              
+            # DEB 文件
+            if [ -d "src-tauri/target/release/bundle/deb" ]; then
+              cd "src-tauri/target/release/bundle/deb"
               for file in *.deb; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.deb"
                   mv "$file" "$new_name"
                   echo "✅ DEB 重命名: $file -> $new_name"
                 fi
               done
-              
-              echo "📋 DEB 重命名后文件列表:"
-              ls -la *.deb 2>/dev/null || echo "未找到 DEB 文件"
               cd - > /dev/null
             fi
             
-            # 处理 RPM 文件
-            rpm_dir="src-tauri/target/release/bundle/rpm"
-            if [ -d "$rpm_dir" ]; then
-              cd "$rpm_dir"
-              echo "📁 RPM 目录: $(pwd)"
-              echo "📋 RPM 构建前文件列表:"
-              ls -la *.rpm 2>/dev/null || echo "未找到 RPM 文件"
-              
+            # RPM 文件
+            if [ -d "src-tauri/target/release/bundle/rpm" ]; then
+              cd "src-tauri/target/release/bundle/rpm"
               for file in *.rpm; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.rpm"
                   mv "$file" "$new_name"
                   echo "✅ RPM 重命名: $file -> $new_name"
                 fi
               done
-              
-              echo "📋 RPM 重命名后文件列表:"
-              ls -la *.rpm 2>/dev/null || echo "未找到 RPM 文件"
               cd - > /dev/null
             fi
             
-            # 处理 AppImage 文件
-            appimage_dir="src-tauri/target/release/bundle/appimage"
-            if [ -d "$appimage_dir" ]; then
-              cd "$appimage_dir"
-              echo "📁 AppImage 目录: $(pwd)"
-              echo "📋 AppImage 构建前文件列表:"
-              ls -la *.AppImage 2>/dev/null || echo "未找到 AppImage 文件"
-              
+            # AppImage 文件
+            if [ -d "src-tauri/target/release/bundle/appimage" ]; then
+              cd "src-tauri/target/release/bundle/appimage"
               for file in *.AppImage; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.AppImage"
                   mv "$file" "$new_name"
                   echo "✅ AppImage 重命名: $file -> $new_name"
                 fi
               done
-              
-              echo "📋 AppImage 重命名后文件列表:"
-              ls -la *.AppImage 2>/dev/null || echo "未找到 AppImage 文件"
+              cd - > /dev/null
+            fi
+          fi
+          
+          # macOS 文件重命名
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            # DMG 文件
+            if [ -d "src-tauri/target/release/bundle/dmg" ]; then
+              cd "src-tauri/target/release/bundle/dmg"
+              for file in *.dmg; do
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.dmg"
+                  mv "$file" "$new_name"
+                  echo "✅ DMG 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # APP 压缩包
+            if [ -d "src-tauri/target/release/bundle/macos" ]; then
+              cd "src-tauri/target/release/bundle/macos"
+              for file in *.app.tar.gz; do
+                if [ -f "$file" ]; then
+                  new_name="${name_prefix}${{ matrix.name-suffix }}.app.tar.gz"
+                  mv "$file" "$new_name"
+                  echo "✅ APP 压缩包重命名: $file -> $new_name"
+                fi
+              done
               cd - > /dev/null
             fi
           fi
@@ -365,14 +298,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/deb/liuyao-desktop*_linux*.deb' || '' }}
-            ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/rpm/liuyao-desktop*_linux*.rpm' || '' }}
-            ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/appimage/liuyao-desktop*_linux*.AppImage' || '' }}
-            ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/msi/liuyao-desktop*_windows*.msi' || '' }}
-            ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/nsis/liuyao-desktop*_windows*.exe' || '' }}
-            ${{ matrix.os == 'windows' && 'src-tauri/target/portable/liuyao-desktop*_windows*.zip' || '' }}
-            ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/dmg/liuyao-desktop*_macos*.dmg' || '' }}
-            ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/liuyao-desktop*_macos*.app.tar.gz' || '' }}
+            # Linux 构建产物
+            ${{ matrix.os == 'linux' && format('src-tauri/target/release/bundle/deb/liuyao-desktop*linux{0}.deb', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'linux' && format('src-tauri/target/release/bundle/rpm/liuyao-desktop*linux{0}.rpm', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'linux' && format('src-tauri/target/release/bundle/appimage/liuyao-desktop*linux{0}.AppImage', matrix.name-suffix) || '' }}
+            
+            # Windows 构建产物
+            ${{ matrix.os == 'windows' && format('src-tauri/target/release/bundle/msi/liuyao-desktop*windows{0}.msi', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'windows' && format('src-tauri/target/release/bundle/nsis/liuyao-desktop*windows{0}.exe', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'windows' && format('src-tauri/target/portable/liuyao-desktop*windows{0}.zip', matrix.name-suffix) || '' }}
+            
+            # macOS 构建产物
+            ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/dmg/liuyao-desktop*macos{0}.dmg', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/macos/liuyao-desktop*macos{0}.app.tar.gz', matrix.name-suffix) || '' }}
+          
           tag_name: ${{ github.ref_name }}
           name: '六爻排盘与研究 v${{ github.ref_name }}'
           body: |
@@ -400,9 +339,36 @@ jobs:
           make_latest: true
           generate_release_notes: true
           append_body: true
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      # 添加构建产物检查步骤
+      - name: Check build artifacts
+        if: always()
+        run: |
+          echo "检查构建产物..."
+          
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            echo "检查 Linux 构建产物:"
+            ls -la src-tauri/target/release/bundle/deb/ || echo "No DEB files"
+            ls -la src-tauri/target/release/bundle/rpm/ || echo "No RPM files"
+            ls -la src-tauri/target/release/bundle/appimage/ || echo "No AppImage files"
+          fi
+          
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            echo "检查 Windows 构建产物:"
+            ls -la src-tauri/target/release/bundle/msi/ || echo "No MSI files"
+            ls -la src-tauri/target/release/bundle/nsis/ || echo "No NSIS files"
+            ls -la src-tauri/target/portable/ || echo "No portable files"
+          fi
+          
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            echo "检查 macOS 构建产物:"
+            ls -la src-tauri/target/release/bundle/dmg/ || echo "No DMG files"
+            ls -la src-tauri/target/release/bundle/macos/ || echo "No APP files"
+          fi
+        shell: bash
 
       - name: Upload build logs (on failure)
         if: failure()
