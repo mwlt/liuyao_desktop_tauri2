@@ -6,7 +6,51 @@ on:
       - 'v*'
 
 jobs:
-  publish-tauri:
+  # 创建 Release
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: '六爻排盘与研究 ${{ github.ref_name }}'
+          body: |
+            ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
+
+            ### 📦 支持平台
+            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
+            - **macOS**: Intel 专用版、Apple Silicon 专用版 (DMG格式)
+            - **Linux**: DEB包、RPM包、AppImage 便携版
+
+            ### 🔽 下载说明
+            - **Windows 用户**: 
+              - 安装版：下载 `.msi` 或 `.exe` 文件
+              - 便携版：下载 `.zip` 文件
+            - **macOS 用户**: 
+              - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
+              - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
+            - **Linux 用户**: 
+              - Ubuntu/Debian: 下载 `.deb` 文件
+              - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
+              - 其他发行版: 下载 `.AppImage` 文件
+          draft: true
+          prerelease: false
+
+  # 构建并上传
+  build-and-upload:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -18,38 +62,28 @@ jobs:
             os: windows
             arch: x86_64
             rust-target: x86_64-pc-windows-msvc
-            name-suffix: "_x86_64"
+            artifact-name: windows-x64
 
           # Linux 64位
           - platform: ubuntu-22.04
             os: linux
             arch: x86_64
             rust-target: x86_64-unknown-linux-gnu
-            name-suffix: "_x86_64"
+            artifact-name: linux-x64
 
           # macOS Intel 版本
           - platform: macos-latest
             os: macos
             arch: x86_64
             rust-target: x86_64-apple-darwin
-            name-suffix: "_intel"
-            build-args: "--target x86_64-apple-darwin"
+            artifact-name: macos-intel
 
           # macOS Apple Silicon 版本
           - platform: macos-latest
             os: macos
             arch: aarch64
             rust-target: aarch64-apple-darwin
-            name-suffix: "_apple_silicon"
-            build-args: "--target aarch64-apple-darwin"
-
-          # macOS 通用版本 (Universal Binary)
-          - platform: macos-latest
-            os: macos
-            arch: universal
-            rust-target: ""
-            name-suffix: "_universal"
-            build-args: ""
+            artifact-name: macos-arm64
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -79,248 +113,26 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: |
-            aarch64-apple-darwin
-            x86_64-apple-darwin
-            x86_64-unknown-linux-gnu
-            i686-unknown-linux-gnu
-            aarch64-unknown-linux-gnu
-            armv7-unknown-linux-gnueabihf
-            x86_64-pc-windows-msvc
-            i686-pc-windows-msvc
-            aarch64-pc-windows-msvc
+          targets: ${{ matrix.rust-target }}
 
-      - name: Setup macOS Universal Binary (macOS Universal only)
-        if: matrix.arch == 'universal'
-        run: |
-          echo "Building macOS Universal Binary"
-          # 确保 Rust 目标已安装
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
+      # 构建 Tauri 应用
+      - name: Build Tauri app
+        run: pnpm tauri build --target ${{ matrix.rust-target }}
 
-      # 第一步：只构建，不上传
-      - name: Build Tauri app (build only)
-        run: |
-          echo "开始构建 ${{ matrix.os }} ${{ matrix.arch }} 版本..."
-          if [ "${{ matrix.build-args }}" != "" ]; then
-            echo "使用构建参数: ${{ matrix.build-args }}"
-            pnpm tauri build ${{ matrix.build-args }}
-          else
-            echo "使用默认构建参数"
-            pnpm tauri build
-          fi
-        shell: bash
-
-      # 第二步：重命名文件
-      - name: Rename artifacts with OS and architecture identifiers
-        shell: bash
-        run: |
-          echo "🔄 开始重命名 ${{ matrix.os }} 构建产物..."
-          
-          # 提取版本号（移除 v 前缀）
-          version="${GITHUB_REF#refs/tags/}"
-          version="${version#v}"
-          echo "📌 版本号: $version"
-          
-          # 设置操作系统和架构标识
-          case "${{ matrix.os }}" in
-            "macos")
-              os_suffix="macos"
-              case "${{ matrix.arch }}" in
-                "x86_64")
-                    arch_suffix="_intel"
-                    ;;
-                "aarch64")
-                    arch_suffix="_apple_silicon"
-                    ;;
-                "universal")
-                    arch_suffix="_universal"
-                    ;;
-              esac
-              ;;
-            "windows")
-              os_suffix="windows"
-              arch_suffix="_x64"
-              ;;
-            "linux")
-              os_suffix="linux"
-              arch_suffix="_x64"
-              ;;
-          esac
-          
-          # 完整的文件名前缀（确保唯一性）
-          name_prefix="liuyao-desktop_${version}_${os_suffix}${arch_suffix}"
-          echo "📝 文件名前缀: $name_prefix"
-          
-          # macOS 文件重命名
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            # DMG 文件
-            if [ -d "src-tauri/target/release/bundle/dmg" ]; then
-              cd "src-tauri/target/release/bundle/dmg"
-              echo "当前 DMG 目录文件:"
-              ls -la
-              for file in *.dmg; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.dmg"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ DMG 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 DMG 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-            
-            # APP 压缩包
-            if [ -d "src-tauri/target/release/bundle/macos" ]; then
-              cd "src-tauri/target/release/bundle/macos"
-              echo "当前 APP 目录文件:"
-              ls -la
-              for file in *.app; do
-                if [ -d "$file" ]; then
-                  new_name="${name_prefix}.app"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ APP 重命名完成: $new_name"
-                  echo "创建压缩包..."
-                  tar -czf "${new_name}.tar.gz" "$new_name"
-                  echo "✅ 压缩包创建完成: ${new_name}.tar.gz"
-                fi
-              done
-              echo "重命名后 APP 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-          fi
-          
-          # Windows 文件重命名
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            # MSI 文件
-            if [ -d "src-tauri/target/release/bundle/msi" ]; then
-              cd "src-tauri/target/release/bundle/msi"
-              echo "当前 MSI 目录文件:"
-              ls -la
-              for file in *.msi; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.msi"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ MSI 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 MSI 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-            
-            # NSIS 文件
-            if [ -d "src-tauri/target/release/bundle/nsis" ]; then
-              cd "src-tauri/target/release/bundle/nsis"
-              echo "当前 NSIS 目录文件:"
-              ls -la
-              for file in *.exe; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.exe"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ EXE 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 NSIS 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-          fi
-          
-          # Linux 文件重命名
-          if [ "${{ matrix.os }}" = "linux" ]; then
-            # DEB 文件
-            if [ -d "src-tauri/target/release/bundle/deb" ]; then
-              cd "src-tauri/target/release/bundle/deb"
-              echo "当前 DEB 目录文件:"
-              ls -la
-              for file in *.deb; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.deb"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ DEB 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 DEB 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-            
-            # RPM 文件
-            if [ -d "src-tauri/target/release/bundle/rpm" ]; then
-              cd "src-tauri/target/release/bundle/rpm"
-              echo "当前 RPM 目录文件:"
-              ls -la
-              for file in *.rpm; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.rpm"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ RPM 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 RPM 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-            
-            # AppImage 文件
-            if [ -d "src-tauri/target/release/bundle/appimage" ]; then
-              cd "src-tauri/target/release/bundle/appimage"
-              echo "当前 AppImage 目录文件:"
-              ls -la
-              for file in *.AppImage; do
-                if [ -f "$file" ]; then
-                  new_name="${name_prefix}.AppImage"
-                  echo "准备重命名: $file -> $new_name"
-                  mv -v "$file" "$new_name"
-                  echo "✅ AppImage 重命名完成: $new_name"
-                fi
-              done
-              echo "重命名后 AppImage 目录文件:"
-              ls -la
-              cd - > /dev/null
-            fi
-          fi
-          
-          echo "✨ ${{ matrix.os }} 文件重命名完成！"
-
-      # 第三步：Windows 便携版构建
+      # Windows 便携版构建
       - name: Build Windows Portable Version
         if: matrix.os == 'windows'
         shell: pwsh
         run: |
           cd src-tauri
           .\scripts\build-portable.ps1
-          
-          # 重命名便携版文件
-          $portableDir = "target/portable"
-          if (Test-Path $portableDir) {
-            Get-ChildItem -Path $portableDir -Filter "*.zip" | ForEach-Object {
-              $oldName = $_.Name
-              if ($oldName -match "liuyao-desktop-portable-v(.+)\.zip") {
-                $version = $matches[1]
-                $newName = "liuyao-desktop_${version}${{ matrix.name-suffix }}.zip"
-                $newPath = Join-Path $portableDir $newName
-                Move-Item $_.FullName $newPath
-                Write-Host "✅ 便携版重命名: $oldName -> $newName"
-              }
-            }
-          }
 
-      # 第四步：创建 APP 压缩包（macOS 专用）
+      # 创建 macOS APP 压缩包
       - name: Create macOS APP archive
         if: matrix.os == 'macos'
         shell: bash
         run: |
-          app_dir="src-tauri/target/release/bundle/macos"
+          app_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle/macos"
           if [ -d "$app_dir" ]; then
             cd "$app_dir"
             for app in *.app; do
@@ -331,124 +143,129 @@ jobs:
             done
           fi
 
-      # 第五步：统一上传所有文件
-      - name: Upload artifacts to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            # Linux 构建产物
-            src-tauri/target/release/bundle/deb/liuyao-desktop*.deb
-            src-tauri/target/release/bundle/rpm/liuyao-desktop*.rpm
-            src-tauri/target/release/bundle/appimage/liuyao-desktop*.AppImage
-            
-            # Windows 构建产物
-            src-tauri/target/release/bundle/msi/liuyao-desktop*.msi
-            src-tauri/target/release/bundle/nsis/liuyao-desktop*.exe
-            src-tauri/target/portable/liuyao-desktop*.zip
-            
-            # macOS 构建产物
-            src-tauri/target/release/bundle/dmg/liuyao-desktop*.dmg
-            src-tauri/target/release/bundle/macos/liuyao-desktop*.app.tar.gz
+      # 收集所有构建产物
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
           
-          tag_name: ${{ github.ref_name }}
-          name: '六爻排盘与研究 ${{ github.ref_name }}'
-          body: |
-            ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
+          # 定义目标目录
+          target_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle"
+          
+          # Windows 产物
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            # MSI
+            find "$target_dir/msi" -name "*.msi" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # NSIS
+            find "$target_dir/nsis" -name "*.exe" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # 便携版
+            find "src-tauri/target/portable" -name "*.zip" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
+          
+          # macOS 产物
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            # DMG
+            find "$target_dir/dmg" -name "*.dmg" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # APP tar.gz
+            find "$target_dir/macos" -name "*.app.tar.gz" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
+          
+          # Linux 产物
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            # DEB
+            find "$target_dir/deb" -name "*.deb" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # RPM
+            find "$target_dir/rpm" -name "*.rpm" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # AppImage
+            find "$target_dir/appimage" -name "*.AppImage" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
+          
+          echo "📦 收集到的产物："
+          ls -la artifacts/
 
-            ### 📦 支持平台
-            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
-            - **macOS**: Intel 专用版、Apple Silicon 专用版、通用版本 (DMG格式)
-            - **Linux**: DEB包、RPM包、AppImage 便携版
+      # 上传产物到 GitHub Actions Artifacts（用于调试）
+      - name: Upload artifacts to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: artifacts/*
+          retention-days: 1
 
-            ### 🔽 下载说明
-            - **Windows 用户**: 
-              - 安装版：下载 `.msi` 或 `.exe` 文件
-              - 便携版：下载 `.zip` 文件
-            - **macOS 用户**: 
-              - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
-              - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
-              - 通用版本: 下载包含 `universal` 的 `.dmg` 文件（推荐）
-            - **Linux 用户**: 
-              - Ubuntu/Debian: 下载 `.deb` 文件
-              - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
-              - 其他发行版: 下载 `.AppImage` 文件
-          draft: false
-          prerelease: false
-          make_latest: true
-          generate_release_notes: true
-          append_body: true
-          fail_on_unmatched_files: false
+      # 上传产物到 Release (Windows)
+      - name: Upload Release Assets (Windows)
+        if: matrix.os == 'windows'
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-
-      # 添加文件检查步骤
-      - name: Check files before upload
-        if: always()
+        shell: pwsh
         run: |
-          echo "检查要上传的文件..."
+          $uploadUrl = "${{ needs.create-release.outputs.upload_url }}"
+          $uploadUrl = $uploadUrl -replace '\{.*\}', ''
           
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            echo "检查 macOS 文件:"
-            echo "DMG 文件:"
-            ls -la src-tauri/target/release/bundle/dmg/
-            echo "APP 文件:"
-            ls -la src-tauri/target/release/bundle/macos/
-          fi
-          
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            echo "检查 Windows 文件:"
-            echo "MSI 文件:"
-            ls -la src-tauri/target/release/bundle/msi/
-            echo "NSIS 文件:"
-            ls -la src-tauri/target/release/bundle/nsis/
-            echo "便携版文件:"
-            ls -la src-tauri/target/portable/
-          fi
-          
-          if [ "${{ matrix.os }}" = "linux" ]; then
-            echo "检查 Linux 文件:"
-            echo "DEB 文件:"
-            ls -la src-tauri/target/release/bundle/deb/
-            echo "RPM 文件:"
-            ls -la src-tauri/target/release/bundle/rpm/
-            echo "AppImage 文件:"
-            ls -la src-tauri/target/release/bundle/appimage/
-          fi
-        shell: bash
+          Get-ChildItem -Path "artifacts" -File | ForEach-Object {
+            $filename = $_.Name
+            $filepath = $_.FullName
+            Write-Host "📤 上传: $filename"
+            
+            # 获取 MIME 类型
+            $mime = switch -Regex ($filename) {
+              '\.msi$' { "application/x-msi" }
+              '\.exe$' { "application/x-msdownload" }
+              '\.zip$' { "application/zip" }
+              default { "application/octet-stream" }
+            }
+            
+            # 使用 curl 上传文件
+            $headers = @{
+              "Authorization" = "token $env:GITHUB_TOKEN"
+              "Content-Type" = $mime
+            }
+            
+            $uri = "${uploadUrl}?name=${filename}"
+            Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -InFile $filepath
+          }
 
-      # 添加构建产物检查步骤
-      - name: Check build artifacts
-        if: always()
+      # 上传产物到 Release (Unix)
+      - name: Upload Release Assets (Unix)
+        if: matrix.os != 'windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        shell: bash
         run: |
-          echo "检查构建产物..."
+          upload_url="${{ needs.create-release.outputs.upload_url }}"
           
-          if [ "${{ matrix.os }}" = "linux" ]; then
-            echo "检查 Linux 构建产物:"
-            ls -la src-tauri/target/release/bundle/deb/ || echo "No DEB files"
-            ls -la src-tauri/target/release/bundle/rpm/ || echo "No RPM files"
-            ls -la src-tauri/target/release/bundle/appimage/ || echo "No AppImage files"
-          fi
-          
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            echo "检查 Windows 构建产物:"
-            ls -la src-tauri/target/release/bundle/msi/ || echo "No MSI files"
-            ls -la src-tauri/target/release/bundle/nsis/ || echo "No NSIS files"
-            ls -la src-tauri/target/portable/ || echo "No portable files"
-          fi
-          
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            echo "检查 macOS 构建产物:"
-            ls -la src-tauri/target/release/bundle/dmg/ || echo "No DMG files"
-            ls -la src-tauri/target/release/bundle/macos/ || echo "No APP files"
-          fi
-        shell: bash
+          # 遍历 artifacts 目录中的所有文件
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "📤 上传: $filename"
+              
+              # 获取 MIME 类型
+              case "${filename##*.}" in
+                dmg) mime="application/x-apple-diskimage" ;;
+                gz) mime="application/gzip" ;;
+                deb) mime="application/vnd.debian.binary-package" ;;
+                rpm) mime="application/x-rpm" ;;
+                AppImage) mime="application/x-executable" ;;
+                *) mime="application/octet-stream" ;;
+              esac
+              
+              # 使用 curl 上传文件
+              curl -X POST \
+                -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Content-Type: $mime" \
+                --data-binary "@$file" \
+                "${upload_url%\{*}?name=$filename"
+            fi
+          done
 
+      # 失败时上传日志
       - name: Upload build logs (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-${{ matrix.os }}-${{ matrix.arch }}
+          name: build-logs-${{ matrix.artifact-name }}
           path: |
-            src-tauri/target/release/build.log
-            ~/.cargo/registry/cache/
+            src-tauri/target/**/build.log
+            src-tauri/target/**/cargo-build.log
+          if-no-files-found: ignore
           retention-days: 7
