@@ -1,87 +1,77 @@
-name: Release
+name: "发布新版本"
+
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  packages: write
-  actions: write
-  pull-requests: write
 
 jobs:
-  release:
+  publish-tauri:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS Intel 专用版本
-          - platform: macos-13  # Intel 运行器
-            os: macos
-            arch: x86_64
-            rust-target: x86_64-apple-darwin
-            name-suffix: "_intel"
-          
-          # macOS Apple Silicon 专用版本
-          - platform: macos-latest  # Apple Silicon 运行器
-            os: macos
-            arch: aarch64
-            rust-target: aarch64-apple-darwin
-            name-suffix: "_apple_silicon"
-          
-          # macOS 通用版本 (Universal Binary)
-          - platform: macos-latest
-            os: macos
-            arch: universal
-            rust-target: ""
-            name-suffix: "_universal"
-          
-          # Linux 版本
-          - platform: ubuntu-22.04
-            os: linux
-            arch: x86_64
-            rust-target: x86_64-unknown-linux-gnu
-            name-suffix: "_x86_64"
-          
-          # Windows 版本
+          # Windows 64位
           - platform: windows-latest
             os: windows
             arch: x86_64
             rust-target: x86_64-pc-windows-msvc
             name-suffix: "_x86_64"
 
+          # Linux 64位
+          - platform: ubuntu-20.04
+            os: linux
+            arch: x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            name-suffix: "_x86_64"
+
+          # macOS Intel 版本
+          - platform: macos-latest
+            os: macos
+            arch: x86_64
+            rust-target: x86_64-apple-darwin
+            name-suffix: "_intel"
+
+          # macOS Apple Silicon 版本
+          - platform: macos-latest
+            os: macos
+            arch: aarch64
+            rust-target: aarch64-apple-darwin
+            name-suffix: "_apple_silicon"
+
+          # macOS 通用版本 (Universal Binary)
+          - platform: macos-latest
+            os: macos
+            arch: universal
+            rust-target: ""
+            name-suffix: "_universal"
+
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GH_PAT }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-20.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: lts/*
 
-      - name: Setup pnpm
+      - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 8
           run_install: false
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Install frontend dependencies
+        run: pnpm install
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -97,31 +87,6 @@ jobs:
             i686-pc-windows-msvc
             aarch64-pc-windows-msvc
 
-      - name: Install dependencies (ubuntu only)
-        if: matrix.os == 'linux'
-        run: |
-          sudo apt-get update
-          # 安装完整的构建依赖
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libasound2-dev \
-            libssl-dev \
-            libdbus-1-dev \
-            libfreetype6-dev \
-            libexpat1-dev \
-            libxcb-composite0-dev \
-            libxrandr-dev \
-            libxss-dev \
-            libxtst-dev \
-            libxcb1-dev
-
-      - name: Install frontend dependencies
-        run: pnpm install
-
       - name: Setup macOS Universal Binary (macOS Universal only)
         if: matrix.arch == 'universal'
         run: |
@@ -130,25 +95,17 @@ jobs:
           rustup target add aarch64-apple-darwin
           rustup target add x86_64-apple-darwin
 
-      - name: Build the app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          # 禁用 macOS 代码签名（适用于开源项目）
-          # 如需启用代码签名，请在 GitHub Secrets 中配置相应证书
-          ENABLE_CODE_SIGNING: false
-        with:
-          args: ${{ matrix.rust-target != '' && format('--target {0}', matrix.rust-target) || '' }}
-          tagName: ${{ github.ref_name }}
-          releaseName: '六爻排盘与研究 v${{ github.ref_name }}'
-          releaseBody: '六爻排盘与研究 ${{ github.ref_name }} 发布 - 支持 Windows、macOS、Linux 多平台'
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: false
-          includeRelease: false
-          includeDebug: false
+      # 第一步：只构建，不上传
+      - name: Build Tauri app (build only)
+        run: |
+          if [ "${{ matrix.rust-target }}" != "" ]; then
+            pnpm tauri build --target ${{ matrix.rust-target }}
+          else
+            pnpm tauri build
+          fi
+        shell: bash
 
-      # 统一重命名步骤：为所有平台的构建产物添加操作系统和架构标识
+      # 第二步：重命名文件
       - name: Rename artifacts with OS and architecture identifiers
         shell: bash
         run: |
@@ -201,6 +158,7 @@ jobs:
               
               echo "📋 DMG 重命名后文件列表:"
               ls -la *.dmg 2>/dev/null || echo "未找到 DMG 文件"
+              cd - > /dev/null
             fi
             
             # 处理 APP 文件
@@ -231,6 +189,7 @@ jobs:
               
               echo "📋 APP 重命名后文件列表:"
               ls -la *.app* 2>/dev/null || echo "未找到 APP 文件"
+              cd - > /dev/null
             fi
           fi
           
@@ -256,6 +215,7 @@ jobs:
               
               echo "📋 MSI 重命名后文件列表:"
               ls -la *.msi 2>/dev/null || echo "未找到 MSI 文件"
+              cd - > /dev/null
             fi
             
             # 处理 NSIS 文件
@@ -278,28 +238,7 @@ jobs:
               
               echo "📋 NSIS 重命名后文件列表:"
               ls -la *.exe 2>/dev/null || echo "未找到 EXE 文件"
-            fi
-            
-            # 处理便携版 ZIP 文件
-            portable_dir="src-tauri/target/release/bundle/portable"
-            if [ -d "$portable_dir" ]; then
-              cd "$portable_dir"
-              echo "📁 便携版目录: $(pwd)"
-              echo "📋 便携版构建前文件列表:"
-              ls -la *.zip 2>/dev/null || echo "未找到 ZIP 文件"
-              
-              for file in *.zip; do
-                if [ -f "$file" ] && [[ "$file" != *"$full_suffix"* ]]; then
-                  base_name="${file%.*}"
-                  extension="${file##*.}"
-                  new_name="${base_name}${full_suffix}.${extension}"
-                  mv "$file" "$new_name"
-                  echo "✅ 便携版重命名: $file -> $new_name"
-                fi
-              done
-              
-              echo "📋 便携版重命名后文件列表:"
-              ls -la *.zip 2>/dev/null || echo "未找到 ZIP 文件"
+              cd - > /dev/null
             fi
           fi
           
@@ -325,6 +264,7 @@ jobs:
               
               echo "📋 DEB 重命名后文件列表:"
               ls -la *.deb 2>/dev/null || echo "未找到 DEB 文件"
+              cd - > /dev/null
             fi
             
             # 处理 RPM 文件
@@ -347,6 +287,7 @@ jobs:
               
               echo "📋 RPM 重命名后文件列表:"
               ls -la *.rpm 2>/dev/null || echo "未找到 RPM 文件"
+              cd - > /dev/null
             fi
             
             # 处理 AppImage 文件
@@ -369,11 +310,13 @@ jobs:
               
               echo "📋 AppImage 重命名后文件列表:"
               ls -la *.AppImage 2>/dev/null || echo "未找到 AppImage 文件"
+              cd - > /dev/null
             fi
           fi
           
           echo "✨ ${{ matrix.os }} 文件重命名完成！"
 
+      # 第三步：Windows 便携版构建
       - name: Build Windows Portable Version
         if: matrix.os == 'windows'
         shell: pwsh
@@ -381,6 +324,23 @@ jobs:
           cd src-tauri
           .\scripts\build-portable.ps1
 
+      # 第四步：创建 APP 压缩包（macOS 专用）
+      - name: Create macOS APP archive
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          app_dir="src-tauri/target/release/bundle/macos"
+          if [ -d "$app_dir" ]; then
+            cd "$app_dir"
+            for app in *.app; do
+              if [ -d "$app" ]; then
+                tar -czf "${app}.tar.gz" "$app"
+                echo "✅ 创建压缩包: ${app}.tar.gz"
+              fi
+            done
+          fi
+
+      # 第五步：统一上传所有文件
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
@@ -395,7 +355,26 @@ jobs:
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/liuyao-desktop*_macos*.app.tar.gz' || '' }}
           tag_name: ${{ github.ref_name }}
           name: '六爻排盘与研究 v${{ github.ref_name }}'
-          body: '六爻排盘与研究 ${{ github.ref_name }} 发布 - 支持 Windows、macOS、Linux 多平台'
+          body: |
+            ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
+
+            ### 📦 支持平台
+            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
+            - **macOS**: Intel 专用版、Apple Silicon 专用版、通用版本 (DMG格式)
+            - **Linux**: DEB包、RPM包、AppImage 便携版
+
+            ### 🔽 下载说明
+            - **Windows 用户**: 
+              - 安装版：下载 `.msi` 或 `.exe` 文件
+              - 便携版：下载 `.zip` 文件
+            - **macOS 用户**: 
+              - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
+              - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
+              - 通用版本: 下载包含 `universal` 的 `.dmg` 文件（推荐）
+            - **Linux 用户**: 
+              - Ubuntu/Debian: 下载 `.deb` 文件
+              - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
+              - 其他发行版: 下载 `.AppImage` 文件
           draft: true
           prerelease: false
           make_latest: true
