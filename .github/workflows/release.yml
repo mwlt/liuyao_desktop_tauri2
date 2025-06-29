@@ -321,9 +321,30 @@ jobs:
           
           echo "✨ ${{ matrix.os }} 文件重命名完成！"
 
+      # 第三步：Windows 便携版构建
+      - name: Build Windows Portable Version
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          cd src-tauri
+          .\scripts\build-portable.ps1
+          
+          # 重命名便携版文件
+          $portableDir = "target/portable"
+          if (Test-Path $portableDir) {
+            Get-ChildItem -Path $portableDir -Filter "*.zip" | ForEach-Object {
+              $oldName = $_.Name
+              if ($oldName -match "liuyao-desktop-portable-v(.+)\.zip") {
+                $version = $matches[1]
+                $newName = "liuyao-desktop_${version}${{ matrix.name-suffix }}.zip"
+                $newPath = Join-Path $portableDir $newName
+                Move-Item $_.FullName $newPath
+                Write-Host "✅ 便携版重命名: $oldName -> $newName"
+              }
+            }
+          }
 
-
-              # 第三步：创建 APP 压缩包（macOS 专用）
+      # 第四步：创建 APP 压缩包（macOS 专用）
       - name: Create macOS APP archive
         if: matrix.os == 'macos'
         shell: bash
@@ -339,7 +360,7 @@ jobs:
             done
           fi
 
-      # 第四步：统一上传所有文件
+      # 第五步：统一上传所有文件
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
@@ -349,6 +370,7 @@ jobs:
             ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/appimage/liuyao-desktop*_linux*.AppImage' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/msi/liuyao-desktop*_windows*.msi' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/nsis/liuyao-desktop*_windows*.exe' || '' }}
+            ${{ matrix.os == 'windows' && 'src-tauri/target/portable/liuyao-desktop*_windows*.zip' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/dmg/liuyao-desktop*_macos*.dmg' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/liuyao-desktop*_macos*.app.tar.gz' || '' }}
           tag_name: ${{ github.ref_name }}
@@ -357,12 +379,14 @@ jobs:
             ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
 
             ### 📦 支持平台
-            - **Windows**: MSI 安装包、NSIS 安装程序
+            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
             - **macOS**: Intel 专用版、Apple Silicon 专用版、通用版本 (DMG格式)
             - **Linux**: DEB包、RPM包、AppImage 便携版
 
             ### 🔽 下载说明
-            - **Windows 用户**: 下载 `.msi` 或 `.exe` 文件
+            - **Windows 用户**: 
+              - 安装版：下载 `.msi` 或 `.exe` 文件
+              - 便携版：下载 `.zip` 文件
             - **macOS 用户**: 
               - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
               - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
