@@ -73,15 +73,5 @@
         "release": "1"
       }
     }
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/mwlt/liuyao_desktop_tauri2/releases/latest/download/latest.json"
-      ],
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMEI0Q0YxNzNCOTAyRjgKUldUZ3lKUXRWaEUvb0NhRm01RHNhWlRHRTlrVzVkMXBVbDBrNGdLY3o4Y053PT0K"
-    }
   }
 }

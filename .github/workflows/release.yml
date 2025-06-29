@@ -142,7 +142,7 @@ jobs:
             ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
 
             ### 📦 支持平台
-            - **Windows**: MSI 安装包、NSIS 安装程序
+            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
             - **macOS**: Intel 专用版、Apple Silicon 专用版、通用版本 (DMG格式)
             - **Linux**: DEB包、RPM包、AppImage 便携版
 
@@ -150,7 +150,9 @@ jobs:
             请查看 [CHANGELOG.md](https://github.com/mwlt/liuyao_desktop_tauri2/blob/main/CHANGELOG.md) 了解详细更新内容。
 
             ### 🔽 下载说明
-            - **Windows 用户**: 下载 `.msi` 或 `.exe` 文件
+            - **Windows 用户**: 
+              - 安装版：下载 `.msi` 或 `.exe` 文件
+              - 便携版：下载 `.zip` 文件
             - **macOS 用户**: 
               - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
               - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
@@ -162,7 +164,7 @@ jobs:
 
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
           includeRelease: true
           includeDebug: false
 
@@ -182,11 +184,9 @@ jobs:
             ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/appimage/*.AppImage' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/msi/*.msi' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/nsis/*.exe' || '' }}
-            ${{ matrix.os == 'windows' && 'src-tauri/target/portable/*.zip' || '' }}
-            ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/dmg/*.dmg' || '' }}
-            ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/*.app.tar.gz' || '' }}
-            src-tauri/target/release/bundle/updater/*.json
-            src-tauri/target/release/bundle/updater/*.sig
+            ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/portable/*.zip' || '' }}
+            ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/dmg/*{0}.dmg', matrix.name-suffix) || '' }}
+            ${{ matrix.os == 'macos' && format('src-tauri/target/release/bundle/macos/*{0}.app.tar.gz', matrix.name-suffix) || '' }}
           tag_name: ${{ github.ref_name }}
           name: liuyao_desktop_${{ github.ref_name }}${{ matrix.name-suffix }}
           body: |
