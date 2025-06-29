@@ -138,7 +138,7 @@ jobs:
           # 如需启用代码签名，请在 GitHub Secrets 中配置相应证书
           ENABLE_CODE_SIGNING: false
         with:
-          args: ${{ matrix.arch == 'universal' && '' || format('--target {0}', matrix.rust-target) }}
+          args: ${{ matrix.rust-target != '' && format('--target {0}', matrix.rust-target) || '' }}
           tagName: ${{ github.ref_name }}
           releaseName: 'liuyao_desktop_${{ github.ref_name }}'
           releaseBody: |
