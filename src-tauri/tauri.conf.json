@@ -10,19 +10,16 @@
   },
   "app": {
     "windows": [{
-     
-    
-        "title": "六爻排盘与研究 v2.6.0",
-        "width": 1600,
-        "height": 1200,
-        "minWidth": 1200,
-        "minHeight": 900,
-        "label": "main",   
-        "resizable":true,
-        "theme":"Light",
-        "proxyUrl": "http://127.0.0.1:8080"
-      }
-    ],
+      "title": "六爻排盘与研究 v2.6.6",
+      "width": 1600,
+      "height": 1200,
+      "minWidth": 1200,
+      "minHeight": 900,
+      "label": "main",   
+      "resizable": true,
+      "theme": "Light",
+      "proxyUrl": "http://127.0.0.1:8080"
+    }],
     "security": {
       "csp": null
     }
@@ -43,7 +40,56 @@
       },
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": true
+      }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null,
+      "hardenedRuntime": true,
+      "universal": true
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ],
+        "section": "utils",
+        "priority": "optional",
+        "changelog": "debian/changelog"
+      },
+      "appimage": {
+        "bundleMediaFramework": true,
+        "args": []
+      },
+      "rpm": {
+        "epoch": 0,
+        "release": "1",
+        "section": "Applications/System",
+        "requires": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libayatana-appindicator-gtk3"
+        ]
       }
     }
+  },
+  "updater": {
+    "active": true,
+    "endpoints": [
+      "https://github.com/mwlt/liuyao_desktop_tauri2/releases/latest/download/latest.json"
+    ],
+    "dialog": true,
+    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMEI0Q0YxNzNCOTAyRjgKUldUZ3lKUXRWaEUvb0NhRm01RHNhWlRHRTlrVzVkMXBVbDBrNGdLY3o4Y053PT0K"
   }
 }
