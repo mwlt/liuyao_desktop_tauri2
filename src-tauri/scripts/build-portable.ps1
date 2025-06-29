@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 创建便携版目录
-$portableDir = "target/portable/六爻排盘与研究-便携版-v$version"
+$portableDir = "target/portable/liuyao-desktop-portable-v$version"
 Write-Host "📦 创建便携版目录: $portableDir"
 New-Item -Path $portableDir -ItemType Directory -Force
 
@@ -70,7 +70,7 @@ start liuyao_desktop_tauri.exe
 
 # 创建ZIP包
 Write-Host "📦 创建ZIP包..."
-$zipPath = "target/portable/六爻排盘与研究-便携版-v$version.zip"
+$zipPath = "target/portable/liuyao-desktop-portable-v$version.zip"
 Compress-Archive -Path $portableDir -DestinationPath $zipPath -Force
 
 Write-Host "✅ 便携版构建完成！"

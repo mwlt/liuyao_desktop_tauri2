@@ -110,6 +110,11 @@ jobs:
         shell: bash
         run: |
           echo "🔄 开始重命名 ${{ matrix.os }} 构建产物..."
+          echo "🔍 调试信息:"
+          echo "  matrix.os: ${{ matrix.os }}"
+          echo "  matrix.arch: ${{ matrix.arch }}"
+          echo "  matrix.name-suffix: ${{ matrix.name-suffix }}"
+          echo "  matrix.rust-target: ${{ matrix.rust-target }}"
           
           # 设置操作系统标识
           case "${{ matrix.os }}" in
@@ -128,7 +133,7 @@ jobs:
           esac
           
           # 组合完整后缀：操作系统 + 架构
-          if [ -n "${{ matrix.name-suffix }}" ]; then
+          if [ "${{ matrix.name-suffix }}" != "" ]; then
             full_suffix="${os_suffix}${{ matrix.name-suffix }}"
           else
             full_suffix="${os_suffix}_${{ matrix.arch }}"
@@ -323,6 +328,21 @@ jobs:
         run: |
           cd src-tauri
           .\scripts\build-portable.ps1
+          
+          # 重命名便携版文件
+          $portableDir = "target/portable"
+          if (Test-Path $portableDir) {
+            Get-ChildItem -Path $portableDir -Filter "*.zip" | ForEach-Object {
+              $oldName = $_.Name
+              if ($oldName -match "liuyao-desktop-portable-v(.+)\.zip") {
+                $version = $matches[1]
+                $newName = "liuyao-desktop_${version}${{ matrix.name-suffix }}.zip"
+                $newPath = Join-Path $portableDir $newName
+                Move-Item $_.FullName $newPath
+                Write-Host "✅ 便携版重命名: $oldName -> $newName"
+              }
+            }
+          }
 
       # 第四步：创建 APP 压缩包（macOS 专用）
       - name: Create macOS APP archive
@@ -350,7 +370,7 @@ jobs:
             ${{ matrix.os == 'linux' && 'src-tauri/target/release/bundle/appimage/liuyao-desktop*_linux*.AppImage' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/msi/liuyao-desktop*_windows*.msi' || '' }}
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/nsis/liuyao-desktop*_windows*.exe' || '' }}
-            ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/portable/liuyao-desktop*_windows*.zip' || '' }}
+            ${{ matrix.os == 'windows' && 'src-tauri/target/portable/liuyao-desktop*_windows*.zip' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/dmg/liuyao-desktop*_macos*.dmg' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/liuyao-desktop*_macos*.app.tar.gz' || '' }}
           tag_name: ${{ github.ref_name }}
