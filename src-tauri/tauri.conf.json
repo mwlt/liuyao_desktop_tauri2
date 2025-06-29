@@ -54,7 +54,7 @@
       "signingIdentity": null,
       "providerShortName": null,
       "entitlements": null,
-      "hardenedRuntime": true
+      "hardenedRuntime": false
     },
     "linux": {
       "deb": {
