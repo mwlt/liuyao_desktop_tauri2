@@ -145,7 +145,7 @@ jobs:
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: false
-          includeRelease: true
+          includeRelease: false
           includeDebug: false
 
       # 统一重命名步骤：为所有平台的构建产物添加操作系统和架构标识
@@ -381,7 +381,7 @@ jobs:
           cd src-tauri
           .\scripts\build-portable.ps1
 
-      - name: Upload all artifacts
+      - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -393,8 +393,9 @@ jobs:
             ${{ matrix.os == 'windows' && 'src-tauri/target/release/bundle/portable/liuyao-desktop*_windows*.zip' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/dmg/liuyao-desktop*_macos*.dmg' || '' }}
             ${{ matrix.os == 'macos' && 'src-tauri/target/release/bundle/macos/liuyao-desktop*_macos*.app.tar.gz' || '' }}
-          tag_name: ${{ github.ref_name }}_${{ matrix.os }}_${{ matrix.arch }}
-          name: liuyao_desktop_${{ github.ref_name }}_${{ matrix.os }}_${{ matrix.arch }}
+          tag_name: ${{ github.ref_name }}
+          name: '六爻排盘与研究 v${{ github.ref_name }}'
+          body: '六爻排盘与研究 ${{ github.ref_name }} 发布 - 支持 Windows、macOS、Linux 多平台'
           draft: true
           prerelease: false
           make_latest: true
