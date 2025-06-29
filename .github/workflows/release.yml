@@ -65,9 +65,9 @@ jobs:
           node-version: 20
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
           run_install: false
 
       - name: Get pnpm store directory
@@ -76,7 +76,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Setup pnpm cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -129,7 +129,7 @@ jobs:
           echo "TAURI_UNIVERSAL_BINARY=true" >> $GITHUB_ENV
 
       - name: Build the app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           ENABLE_CODE_SIGNING: ${{ secrets.APPLE_CERTIFICATE }}
@@ -178,7 +178,7 @@ jobs:
           .\scripts\build-portable.ps1
 
       - name: Upload all artifacts
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/release/bundle/deb/*.deb
@@ -201,12 +201,17 @@ jobs:
             构建平台: ${{ matrix.platform }}
             架构: ${{ matrix.arch }}
             构建目标: ${{ matrix.rust-target }}
+          draft: true
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          append_body: true
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Upload build logs (on failure)
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-logs-${{ matrix.os }}-${{ matrix.arch }}
           path: |
