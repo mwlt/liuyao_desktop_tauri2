@@ -1,6 +1,6 @@
 {
   "productName": "liuyao-desktop",
-  "version": "2.6.8",
+  "version": "2.6.9",
   "identifier": "com.mwlt.liuyao-desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -10,7 +10,7 @@
   },
   "app": {
     "windows": [{
-      "title": "六爻排盘与研究 v2.6.8",
+      "title": "六爻排盘与研究 v2.6.9",
       "width": 1600,
       "height": 1200,
       "minWidth": 1200,

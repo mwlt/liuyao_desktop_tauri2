@@ -53,33 +53,55 @@ jobs:
       
       - name: Create Release
         id: create-release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-        with:
-          tag_name: ${{ steps.get-version.outputs.version }}
-          release_name: '六爻排盘与研究 ${{ steps.get-version.outputs.version }}'
-          body: |
-            ## 🎉 六爻排盘与研究 ${{ steps.get-version.outputs.version }} 发布
+        run: |
+          # 定义 Release 内容
+          RELEASE_BODY=$(cat << 'EOF'
+          ## 🎉 六爻排盘与研究 ${{ steps.get-version.outputs.version }} 发布
 
-            ### 📦 支持平台
-            - **Windows**: MSI 安装包、NSIS 安装程序、便携版
-            - **macOS**: Intel 专用版、Apple Silicon 专用版 (DMG格式)
-            - **Linux**: DEB包、RPM包、AppImage 便携版
+          ### 📦 支持平台
+          - **Windows**: MSI 安装包、NSIS 安装程序、便携版
+          - **macOS**: Intel 专用版、Apple Silicon 专用版 (DMG格式)
+          - **Linux**: DEB包、RPM包、AppImage 便携版
 
-            ### 🔽 下载说明
-            - **Windows 用户**: 
-              - 安装版：下载 `.msi` 或 `.exe` 文件
-              - 便携版：下载 `.zip` 文件
-            - **macOS 用户**: 
-              - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
-              - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
-            - **Linux 用户**: 
-              - Ubuntu/Debian: 下载 `.deb` 文件
-              - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
-              - 其他发行版: 下载 `.AppImage` 文件
-          draft: ${{ steps.get-version.outputs.is_draft == 'true' }}
-          prerelease: ${{ steps.get-version.outputs.is_prerelease == 'true' }}
+          ### 🔽 下载说明
+          - **Windows 用户**: 
+            - 安装版：下载 `.msi` 或 `.exe` 文件
+            - 便携版：下载 `.zip` 文件
+          - **macOS 用户**: 
+            - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
+            - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
+          - **Linux 用户**: 
+            - Ubuntu/Debian: 下载 `.deb` 文件
+            - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
+            - 其他发行版: 下载 `.AppImage` 文件
+          EOF
+          )
+          
+          # 创建 Release
+          RESPONSE=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases \
+            -f tag_name='${{ steps.get-version.outputs.version }}' \
+            -f name='六爻排盘与研究 ${{ steps.get-version.outputs.version }}' \
+            -f body="$RELEASE_BODY" \
+            -F draft=${{ steps.get-version.outputs.is_draft == 'true' }} \
+            -F prerelease=${{ steps.get-version.outputs.is_prerelease == 'true' }})
+          
+          # 提取 release ID 和 upload URL
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+          UPLOAD_URL=$(echo "$RESPONSE" | jq -r '.upload_url')
+          
+          # 设置输出
+          echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+          
+          echo "✅ Release 创建成功！"
+          echo "📌 Release ID: $RELEASE_ID"
+          echo "📤 Upload URL: $UPLOAD_URL"
 
   # 构建并上传
   build-and-upload:
