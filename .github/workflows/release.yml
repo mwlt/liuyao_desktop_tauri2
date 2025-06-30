@@ -119,6 +119,147 @@ jobs:
       - name: Build Tauri app
         run: pnpm tauri build --target ${{ matrix.rust-target }}
 
+      # 重命名构建产物
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          echo "🔄 开始重命名 ${{ matrix.os }} 构建产物..."
+          
+          # 定义目标目录
+          target_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle"
+          
+          # 设置操作系统和架构后缀
+          case "${{ matrix.os }}" in
+            "windows")
+              os_suffix="_windows_x64"
+              ;;
+            "linux")
+              os_suffix="_linux_x64"
+              ;;
+            "macos")
+              if [ "${{ matrix.arch }}" = "x86_64" ]; then
+                os_suffix="_macos_intel"
+              else
+                os_suffix="_macos_apple_silicon"
+              fi
+              ;;
+          esac
+          
+          echo "📝 使用后缀: $os_suffix"
+          
+          # Windows 产物重命名
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            # MSI 文件
+            if [ -d "$target_dir/msi" ]; then
+              cd "$target_dir/msi"
+              for file in *.msi; do
+                if [ -f "$file" ]; then
+                  base="${file%_*}"
+                  new_name="${base}${os_suffix}.msi"
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # NSIS 文件
+            if [ -d "$target_dir/nsis" ]; then
+              cd "$target_dir/nsis"
+              for file in *.exe; do
+                if [ -f "$file" ]; then
+                  # 处理 setup.exe 格式
+                  if [[ "$file" == *-setup.exe ]]; then
+                    base="${file%-setup.exe}"
+                    new_name="${base}${os_suffix}-setup.exe"
+                  else
+                    base="${file%.exe}"
+                    new_name="${base}${os_suffix}.exe"
+                  fi
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+          fi
+          
+          # macOS 产物重命名
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            # DMG 文件
+            if [ -d "$target_dir/dmg" ]; then
+              cd "$target_dir/dmg"
+              for file in *.dmg; do
+                if [ -f "$file" ]; then
+                  base="${file%.dmg}"
+                  new_name="${base}${os_suffix}.dmg"
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+          fi
+          
+          # Linux 产物重命名
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            # DEB 文件
+            if [ -d "$target_dir/deb" ]; then
+              cd "$target_dir/deb"
+              for file in *.deb; do
+                if [ -f "$file" ]; then
+                  # 处理 _amd64.deb 格式
+                  if [[ "$file" == *_amd64.deb ]]; then
+                    base="${file%_amd64.deb}"
+                    new_name="${base}${os_suffix}.deb"
+                  else
+                    base="${file%.deb}"
+                    new_name="${base}${os_suffix}.deb"
+                  fi
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # RPM 文件
+            if [ -d "$target_dir/rpm" ]; then
+              cd "$target_dir/rpm"
+              for file in *.rpm; do
+                if [ -f "$file" ]; then
+                  base="${file%.rpm}"
+                  new_name="${base}${os_suffix}.rpm"
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # AppImage 文件
+            if [ -d "$target_dir/appimage" ]; then
+              cd "$target_dir/appimage"
+              for file in *.AppImage; do
+                if [ -f "$file" ]; then
+                  # 处理 _amd64.AppImage 格式
+                  if [[ "$file" == *_amd64.AppImage ]]; then
+                    base="${file%_amd64.AppImage}"
+                    new_name="${base}${os_suffix}.AppImage"
+                  else
+                    base="${file%.AppImage}"
+                    new_name="${base}${os_suffix}.AppImage"
+                  fi
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+          fi
+          
+          echo "✨ 重命名完成！"
+
       # Windows 便携版构建
       - name: Build Windows Portable Version
         if: matrix.os == 'windows'
@@ -126,6 +267,21 @@ jobs:
         run: |
           cd src-tauri
           .\scripts\build-portable.ps1
+          
+          # 重命名便携版文件
+          $portableDir = "target/portable"
+          if (Test-Path $portableDir) {
+            Get-ChildItem -Path $portableDir -Filter "*.zip" | ForEach-Object {
+              $oldName = $_.Name
+              if ($oldName -match "liuyao-desktop-portable-v(.+)\.zip") {
+                $version = $matches[1]
+                $newName = "liuyao-desktop-portable-v${version}_windows_x64.zip"
+                $newPath = Join-Path $portableDir $newName
+                Move-Item $_.FullName $newPath -Force
+                Write-Host "✅ 便携版重命名: $oldName -> $newName"
+              }
+            }
+          }
 
       # 创建 macOS APP 压缩包
       - name: Create macOS APP archive
@@ -135,10 +291,21 @@ jobs:
           app_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle/macos"
           if [ -d "$app_dir" ]; then
             cd "$app_dir"
+            
+            # 设置架构后缀
+            if [ "${{ matrix.arch }}" = "x86_64" ]; then
+              os_suffix="_macos_intel"
+            else
+              os_suffix="_macos_apple_silicon"
+            fi
+            
             for app in *.app; do
               if [ -d "$app" ]; then
-                tar -czf "${app}.tar.gz" "$app"
-                echo "✅ 创建压缩包: ${app}.tar.gz"
+                # 获取应用名称（不包含 .app）
+                app_name="${app%.app}"
+                archive_name="${app_name}${os_suffix}.app.tar.gz"
+                tar -czf "$archive_name" "$app"
+                echo "✅ 创建压缩包: $archive_name"
               fi
             done
           fi
