@@ -4,6 +4,22 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（例如: 2.6.9）'
+        required: true
+        type: string
+      draft:
+        description: '是否创建为草稿'
+        required: false
+        type: boolean
+        default: true
+      prerelease:
+        description: '是否为预发布版本'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   # 创建 Release
@@ -18,16 +34,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
+      - name: Determine version
+        id: get-version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="v${{ github.event.inputs.version }}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_draft=${{ github.event.inputs.draft }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+          else
+            VERSION="${{ github.ref_name }}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_draft=true" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          echo "📌 版本号: $VERSION"
+        shell: bash
+      
       - name: Create Release
         id: create-release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: '六爻排盘与研究 ${{ github.ref_name }}'
+          tag_name: ${{ steps.get-version.outputs.version }}
+          release_name: '六爻排盘与研究 ${{ steps.get-version.outputs.version }}'
           body: |
-            ## 🎉 六爻排盘与研究 ${{ github.ref_name }} 发布
+            ## 🎉 六爻排盘与研究 ${{ steps.get-version.outputs.version }} 发布
 
             ### 📦 支持平台
             - **Windows**: MSI 安装包、NSIS 安装程序、便携版
@@ -45,8 +78,8 @@ jobs:
               - Ubuntu/Debian: 下载 `.deb` 文件
               - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
               - 其他发行版: 下载 `.AppImage` 文件
-          draft: true
-          prerelease: false
+          draft: ${{ steps.get-version.outputs.is_draft == 'true' }}
+          prerelease: ${{ steps.get-version.outputs.is_prerelease == 'true' }}
 
   # 构建并上传
   build-and-upload:
