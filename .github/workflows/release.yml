@@ -58,7 +58,7 @@ jobs:
         run: |
           # 定义 Release 内容
           RELEASE_BODY=$(cat << 'EOF'
-          ## 🎉 六爻排盘与研究 ${{ steps.get-version.outputs.version }} 发布
+          ## 🎉 六爻排盘与研究 桌面端 ${{ steps.get-version.outputs.version }} 发布
 
           ### 📦 支持平台
           - **Windows**: MSI 安装包、NSIS 安装程序、便携版
