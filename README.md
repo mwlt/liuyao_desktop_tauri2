@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 18:05:32
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-28 00:30:52
+ * @LastEditTime: 2025-07-02 06:39:23
  * @FilePath: \liuyao_desktop_tauri\README.md
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 -->
@@ -18,13 +18,14 @@
 - 🔄 支持多种代理设置（系统代理/手动代理）
 - 🌐 内置网站访问支持
 - 🛡️ 安全的跨域请求处理
-- 💻 跨平台支持 (Windows, macOS, Linux)
+- ~~💻 跨平台支持 (Windows, macOS, Linux)~~
+- 💻 支持windows,(因macos , linux系统中调用webKit webKitGTK,不支持参数启动,无法实现独立代理管理,仅仅套个壳子有更简单的写法,两分钟的事情,不如另起项目不要工具栏及工具栏中各种功能,故取消.)
 
 ## 开发环境配置
 
 ### 系统要求
 
-- [Node.js](https://nodejs.org/) (推荐 v16 或更高版本)
+- [Node.js](https://nodejs.org/) (推荐 v18 或更高版本)
 - [Rust](https://www.rust-lang.org/)
 - [VS Code](https://code.visualstudio.com/) (推荐)
 

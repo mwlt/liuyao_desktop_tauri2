@@ -62,20 +62,20 @@ jobs:
 
           ### 📦 支持平台
           - **Windows**: MSI 安装包、NSIS 安装程序、便携版
-          - **macOS**: Intel 专用版、Apple Silicon 专用版 (DMG格式) (已注释)
-          - **Linux**: DEB包、RPM包、AppImage 便携版 (已注释)
+          - **macOS**: Intel 专用版、Apple Silicon 专用版 (DMG格式)
+          - **Linux**: DEB包、RPM包、AppImage 便携版
 
           ### 🔽 下载说明
           - **Windows 用户**: 
             - 安装版：下载 `.msi` 或 `.exe` 文件
             - 便携版：下载 `.zip` 文件
-          - **macOS 用户**: (已注释)
-          -   - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
-          -   - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
-          - **Linux 用户**: (已注释)
-          -   - Ubuntu/Debian: 下载 `.deb` 文件
-          -   - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
-          -   - 其他发行版: 下载 `.AppImage` 文件
+          - **macOS 用户**: 
+            - Intel Mac: 下载包含 `intel` 的 `.dmg` 文件
+            - Apple Silicon Mac: 下载包含 `apple_silicon` 的 `.dmg` 文件  
+          - **Linux 用户**: 
+            - Ubuntu/Debian: 下载 `.deb` 文件
+            - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
+            - 其他发行版: 下载 `.AppImage` 文件
           EOF
           )
           
@@ -119,33 +119,37 @@ jobs:
             rust-target: x86_64-pc-windows-msvc
             artifact-name: windows-x64
 
-          # Linux 64位 (已注释)
-          # - platform: ubuntu-22.04
-          #   os: linux
-          #   arch: x86_64
-          #   rust-target: x86_64-unknown-linux-gnu
-          #   artifact-name: linux-x64
+          # Linux 64位
+          - platform: ubuntu-22.04
+            os: linux
+            arch: x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            artifact-name: linux-x64
 
-          # macOS Intel 版本 (已注释)
-          # - platform: macos-latest
-          #   os: macos
-          #   arch: x86_64
-          #   rust-target: x86_64-apple-darwin
-          #   artifact-name: macos-intel
+          # macOS Intel 版本
+          - platform: macos-latest
+            os: macos
+            arch: x86_64
+            rust-target: x86_64-apple-darwin
+            artifact-name: macos-intel
 
-          # macOS Apple Silicon 版本 (已注释)
-          # - platform: macos-latest
-          #   os: macos
-          #   arch: aarch64
-          #   rust-target: aarch64-apple-darwin
-          #   artifact-name: macos-arm64
+          # macOS Apple Silicon 版本
+          - platform: macos-latest
+            os: macos
+            arch: aarch64
+            rust-target: aarch64-apple-darwin
+            artifact-name: macos-arm64
 
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -184,16 +188,16 @@ jobs:
             "windows")
               os_suffix="_windows_x64"
               ;;
-            # "linux")
-            #   os_suffix="_linux_x64"
-            #   ;;
-            # "macos")
-            #   if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            #     os_suffix="_macos_intel"
-            #   else
-            #     os_suffix="_macos_apple_silicon"
-            #   fi
-            #   ;;
+            "linux")
+              os_suffix="_linux_x64"
+              ;;
+            "macos")
+              if [ "${{ matrix.arch }}" = "x86_64" ]; then
+                os_suffix="_macos_intel"
+              else
+                os_suffix="_macos_apple_silicon"
+              fi
+              ;;
           esac
           
           echo "📝 使用后缀: $os_suffix"
@@ -235,79 +239,79 @@ jobs:
             fi
           fi
           
-          # macOS 产物重命名 (已注释)
-          # if [ "${{ matrix.os }}" = "macos" ]; then
-          #   # DMG 文件
-          #   if [ -d "$target_dir/dmg" ]; then
-          #     cd "$target_dir/dmg"
-          #     for file in *.dmg; do
-          #       if [ -f "$file" ]; then
-          #         base="${file%.dmg}"
-          #         new_name="${base}${os_suffix}.dmg"
-          #         mv "$file" "$new_name" 2>/dev/null || true
-          #         echo "✅ 重命名: $file -> $new_name"
-          #       fi
-          #     done
-          #     cd - > /dev/null
-          #   fi
-          # fi
+          # macOS 产物重命名
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            # DMG 文件
+            if [ -d "$target_dir/dmg" ]; then
+              cd "$target_dir/dmg"
+              for file in *.dmg; do
+                if [ -f "$file" ]; then
+                  base="${file%.dmg}"
+                  new_name="${base}${os_suffix}.dmg"
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+          fi
           
-          # Linux 产物重命名 (已注释)
-          # if [ "${{ matrix.os }}" = "linux" ]; then
-          #   # DEB 文件
-          #   if [ -d "$target_dir/deb" ]; then
-          #     cd "$target_dir/deb"
-          #     for file in *.deb; do
-          #       if [ -f "$file" ]; then
-          #         # 处理 _amd64.deb 格式
-          #         if [[ "$file" == *_amd64.deb ]]; then
-          #           base="${file%_amd64.deb}"
-          #           new_name="${base}${os_suffix}.deb"
-          #         else
-          #           base="${file%.deb}"
-          #           new_name="${base}${os_suffix}.deb"
-          #         fi
-          #         mv "$file" "$new_name" 2>/dev/null || true
-          #         echo "✅ 重命名: $file -> $new_name"
-          #       fi
-          #     done
-          #     cd - > /dev/null
-          #   fi
-          
-          #   # RPM 文件
-          #   if [ -d "$target_dir/rpm" ]; then
-          #     cd "$target_dir/rpm"
-          #     for file in *.rpm; do
-          #       if [ -f "$file" ]; then
-          #         base="${file%.rpm}"
-          #         new_name="${base}${os_suffix}.rpm"
-          #         mv "$file" "$new_name" 2>/dev/null || true
-          #         echo "✅ 重命名: $file -> $new_name"
-          #       fi
-          #     done
-          #     cd - > /dev/null
-          #   fi
-          
-          #   # AppImage 文件
-          #   if [ -d "$target_dir/appimage" ]; then
-          #     cd "$target_dir/appimage"
-          #     for file in *.AppImage; do
-          #       if [ -f "$file" ]; then
-          #         # 处理 _amd64.AppImage 格式
-          #         if [[ "$file" == *_amd64.AppImage ]]; then
-          #           base="${file%_amd64.AppImage}"
-          #           new_name="${base}${os_suffix}.AppImage"
-          #         else
-          #           base="${file%.AppImage}"
-          #           new_name="${base}${os_suffix}.AppImage"
-          #         fi
-          #         mv "$file" "$new_name" 2>/dev/null || true
-          #         echo "✅ 重命名: $file -> $new_name"
-          #       fi
-          #     done
-          #     cd - > /dev/null
-          #   fi
-          # fi
+          # Linux 产物重命名
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            # DEB 文件
+            if [ -d "$target_dir/deb" ]; then
+              cd "$target_dir/deb"
+              for file in *.deb; do
+                if [ -f "$file" ]; then
+                  # 处理 _amd64.deb 格式
+                  if [[ "$file" == *_amd64.deb ]]; then
+                    base="${file%_amd64.deb}"
+                    new_name="${base}${os_suffix}.deb"
+                  else
+                    base="${file%.deb}"
+                    new_name="${base}${os_suffix}.deb"
+                  fi
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # RPM 文件
+            if [ -d "$target_dir/rpm" ]; then
+              cd "$target_dir/rpm"
+              for file in *.rpm; do
+                if [ -f "$file" ]; then
+                  base="${file%.rpm}"
+                  new_name="${base}${os_suffix}.rpm"
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+            
+            # AppImage 文件
+            if [ -d "$target_dir/appimage" ]; then
+              cd "$target_dir/appimage"
+              for file in *.AppImage; do
+                if [ -f "$file" ]; then
+                  # 处理 _amd64.AppImage 格式
+                  if [[ "$file" == *_amd64.AppImage ]]; then
+                    base="${file%_amd64.AppImage}"
+                    new_name="${base}${os_suffix}.AppImage"
+                  else
+                    base="${file%.AppImage}"
+                    new_name="${base}${os_suffix}.AppImage"
+                  fi
+                  mv "$file" "$new_name" 2>/dev/null || true
+                  echo "✅ 重命名: $file -> $new_name"
+                fi
+              done
+              cd - > /dev/null
+            fi
+          fi
           
           echo "✨ 重命名完成！"
 
@@ -334,32 +338,32 @@ jobs:
             }
           }
 
-      # 创建 macOS APP 压缩包 (已注释)
-      # - name: Create macOS APP archive
-      #   if: matrix.os == 'macos'
-      #   shell: bash
-      #   run: |
-      #     app_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle/macos"
-      #     if [ -d "$app_dir" ]; then
-      #       cd "$app_dir"
-      #       
-      #       # 设置架构后缀
-      #       if [ "${{ matrix.arch }}" = "x86_64" ]; then
-      #         os_suffix="_macos_intel"
-      #       else
-      #         os_suffix="_macos_apple_silicon"
-      #       fi
-      #       
-      #       for app in *.app; do
-      #         if [ -d "$app" ]; then
-      #           # 获取应用名称（不包含 .app）
-      #           app_name="${app%.app}"
-      #           archive_name="${app_name}${os_suffix}.app.tar.gz"
-      #           tar -czf "$archive_name" "$app"
-      #           echo "✅ 创建压缩包: $archive_name"
-      #         fi
-      #       done
-      #     fi
+      # 创建 macOS APP 压缩包
+      - name: Create macOS APP archive
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          app_dir="src-tauri/target/${{ matrix.rust-target }}/release/bundle/macos"
+          if [ -d "$app_dir" ]; then
+            cd "$app_dir"
+            
+            # 设置架构后缀
+            if [ "${{ matrix.arch }}" = "x86_64" ]; then
+              os_suffix="_macos_intel"
+            else
+              os_suffix="_macos_apple_silicon"
+            fi
+            
+            for app in *.app; do
+              if [ -d "$app" ]; then
+                # 获取应用名称（不包含 .app）
+                app_name="${app%.app}"
+                archive_name="${app_name}${os_suffix}.app.tar.gz"
+                tar -czf "$archive_name" "$app"
+                echo "✅ 创建压缩包: $archive_name"
+              fi
+            done
+          fi
 
       # 收集所有构建产物
       - name: Collect artifacts
@@ -380,23 +384,23 @@ jobs:
             find "src-tauri/target/portable" -name "*.zip" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
           fi
           
-          # macOS 产物 (已注释)
-          # if [ "${{ matrix.os }}" = "macos" ]; then
-          #   # DMG
-          #   find "$target_dir/dmg" -name "*.dmg" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          #   # APP tar.gz
-          #   find "$target_dir/macos" -name "*.app.tar.gz" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          # fi
+          # macOS 产物
+          if [ "${{ matrix.os }}" = "macos" ]; then
+            # DMG
+            find "$target_dir/dmg" -name "*.dmg" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # APP tar.gz
+            find "$target_dir/macos" -name "*.app.tar.gz" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
           
-          # Linux 产物 (已注释)
-          # if [ "${{ matrix.os }}" = "linux" ]; then
-          #   # DEB
-          #   find "$target_dir/deb" -name "*.deb" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          #   # RPM
-          #   find "$target_dir/rpm" -name "*.rpm" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          #   # AppImage
-          #   find "$target_dir/appimage" -name "*.AppImage" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          # fi
+          # Linux 产物
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            # DEB
+            find "$target_dir/deb" -name "*.deb" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # RPM
+            find "$target_dir/rpm" -name "*.rpm" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+            # AppImage
+            find "$target_dir/appimage" -name "*.AppImage" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
           
           echo "📦 收集到的产物："
           ls -la artifacts/
@@ -442,39 +446,39 @@ jobs:
             Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -InFile $filepath
           }
 
-      # 上传产物到 Release (Unix) (已注释)
-      # - name: Upload Release Assets (Unix)
-      #   if: matrix.os != 'windows'
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-      #   shell: bash
-      #   run: |
-      #     upload_url="${{ needs.create-release.outputs.upload_url }}"
-      #     
-      #     # 遍历 artifacts 目录中的所有文件
-      #     for file in artifacts/*; do
-      #       if [ -f "$file" ]; then
-      #         filename=$(basename "$file")
-      #         echo "📤 上传: $filename"
-      #         
-      #         # 获取 MIME 类型
-      #         case "${filename##*.}" in
-      #           dmg) mime="application/x-apple-diskimage" ;;
-      #           gz) mime="application/gzip" ;;
-      #           deb) mime="application/vnd.debian.binary-package" ;;
-      #           rpm) mime="application/x-rpm" ;;
-      #           AppImage) mime="application/x-executable" ;;
-      #           *) mime="application/octet-stream" ;;
-      #         esac
-      #         
-      #         # 使用 curl 上传文件
-      #         curl -X POST \
-      #           -H "Authorization: token $GITHUB_TOKEN" \
-      #           -H "Content-Type: $mime" \
-      #           --data-binary "@$file" \
-      #           "${upload_url%\{*}?name=$filename"
-      #       fi
-      #     done
+      # 上传产物到 Release (Unix)
+      - name: Upload Release Assets (Unix)
+        if: matrix.os != 'windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        shell: bash
+        run: |
+          upload_url="${{ needs.create-release.outputs.upload_url }}"
+          
+          # 遍历 artifacts 目录中的所有文件
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "📤 上传: $filename"
+              
+              # 获取 MIME 类型
+              case "${filename##*.}" in
+                dmg) mime="application/x-apple-diskimage" ;;
+                gz) mime="application/gzip" ;;
+                deb) mime="application/vnd.debian.binary-package" ;;
+                rpm) mime="application/x-rpm" ;;
+                AppImage) mime="application/x-executable" ;;
+                *) mime="application/octet-stream" ;;
+              esac
+              
+              # 使用 curl 上传文件
+              curl -X POST \
+                -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Content-Type: $mime" \
+                --data-binary "@$file" \
+                "${upload_url%\{*}?name=$filename"
+            fi
+          done
 
       # 失败时上传日志
       - name: Upload build logs (on failure)
