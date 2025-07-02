@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（例如: 2.6.9）'
+        description: '版本号（例如: 2.6.10）'
         required: true
         type: string
       draft:
@@ -77,7 +77,7 @@ jobs:
             - RHEL/CentOS/Fedora: 下载 `.rpm` 文件
             - 其他发行版: 下载 `.AppImage` 文件
           EOF
-          )
+          )   
           
           # 创建 Release
           RESPONSE=$(gh api \
