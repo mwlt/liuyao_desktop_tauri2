@@ -195,7 +195,7 @@ jobs:
         shell: pwsh
         run: |
           cd src-tauri
-          .\scripts\build-portable.ps1
+          .\scripts\build-portable-ci.ps1
           
           # 重命名便携版文件
           $portableDir = "target/portable"

@@ -3,8 +3,8 @@ $env:TAURI_BUNDLE_PORTABLE = "true"
 
 # 获取项目根目录
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$tauriDir = (Get-Item $scriptDir).Parent.FullName
-$projectRoot = (Get-Item $tauriDir).Parent.FullName
+$projectRoot = (Get-Item $scriptDir).Parent.Parent.FullName
+$tauriDir = Join-Path $projectRoot "src-tauri"
 
 Write-Host "📌 项目根目录: $projectRoot"
 Write-Host "📌 Tauri 目录: $tauriDir"
@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # 使用 Tauri 构建
 Write-Host "🏗️ 使用 Tauri 构建应用..."
-Set-Location $tauriDir
+Set-Location $projectRoot  # CI 环境需要在项目根目录
 Write-Host "📌 当前目录: $(Get-Location)"
 
 # 确保目标目录存在
@@ -41,8 +41,8 @@ if (-not (Test-Path $targetDir)) {
     Write-Host "📁 创建目标目录: $targetDir"
 }
 
-# 本地环境使用 cargo tauri build
-cargo tauri build
+# CI 环境使用 pnpm tauri build
+pnpm tauri build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Tauri 构建失败"
     Write-Host "📋 检查日志文件..."
