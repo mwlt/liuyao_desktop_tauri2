@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-26 00:11:01
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-07-02 19:30:40
+ * @LastEditTime: 2025-07-02 23:10:06
  * @FilePath: \liuyao_desktop_tauri\src-tauri\src\proxy_server.rs
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -13,10 +13,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+// 新增：文件操作和路径管理
+use std::fs;
+use std::path::{Path, PathBuf};
 
 const BUFFER_SIZE: usize = 16 * 1024; // 16KB buffer，对大多数HTTP请求足够
 const WS_BUFFER_SIZE: usize = 32 * 1024; // 32KB for WebSocket，为WebSocket连接提供更大缓冲区
 const TIMEOUT: u64 = 10; // 60秒超时
+
+// 新增：配置文件名称
+const CONFIG_FILE_NAME: &str = "proxy_settings.json";
 
 // 新增：代理配置结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +60,60 @@ impl Default for ProxySettings {
             direct_domains: vec![],
         }
     }
+}
+
+// 新增：获取配置文件路径
+fn get_config_file_path() -> Result<PathBuf, String> {
+    let app_data_dir = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .map_err(|_| "无法获取APPDATA环境变量".to_string())?
+    } else {
+        std::env::var("HOME")
+            .map_err(|_| "无法获取HOME环境变量".to_string())?
+    };
+    
+    let config_dir = Path::new(&app_data_dir).join("liuyao_desktop_tauri");
+    
+    // 确保配置目录存在
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("创建配置目录失败: {}", e))?;
+    }
+    
+    Ok(config_dir.join(CONFIG_FILE_NAME))
+}
+
+// 新增：保存配置到文件
+pub fn save_settings_to_file(settings: &ProxySettings) -> Result<(), String> {
+    let config_path = get_config_file_path()?;
+    
+    let json_data = serde_json::to_string_pretty(settings)
+        .map_err(|e| format!("序列化配置失败: {}", e))?;
+    
+    fs::write(&config_path, json_data)
+        .map_err(|e| format!("写入配置文件失败: {}", e))?;
+    
+    println!("[proxy] ✅ 配置已保存到: {:?}", config_path);
+    Ok(())
+}
+
+// 新增：从文件加载配置
+pub fn load_settings_from_file() -> Result<ProxySettings, String> {
+    let config_path = get_config_file_path()?;
+    
+    if !config_path.exists() {
+        println!("[proxy] 配置文件不存在，使用默认设置: {:?}", config_path);
+        return Ok(ProxySettings::default());
+    }
+    
+    let json_data = fs::read_to_string(&config_path)
+        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+    
+    let settings: ProxySettings = serde_json::from_str(&json_data)
+        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+    
+    println!("[proxy] ✅ 配置已从文件加载: {:?}", config_path);
+    Ok(settings)
 }
 
 // 获取系统代理设置
@@ -303,6 +363,12 @@ fn connect_with_proxy_settings(
     target: &str,
     settings: &ProxySettings,
 ) -> std::io::Result<TcpStream> {
+    // 首先检查代理是否启用
+    if !settings.enabled {
+        println!("[proxy] 代理已禁用，强制直连: {}", target);
+        return direct_connect(target);
+    }
+
     // 防止循环代理：如果目标是本地代理端口，直接连接
     if target.contains("127.0.0.1:8080") || target.contains("localhost:8080") {
         println!("[proxy] 检测到循环代理，改为直连: {}", target);
@@ -1252,8 +1318,13 @@ impl ProxyServer {
     // 新增：更新代理设置
     pub fn update_proxy_settings(&self, new_settings: ProxySettings) {
         if let Ok(mut settings) = self.settings.lock() {
-            *settings = new_settings;
+            *settings = new_settings.clone();
             println!("[proxy] 代理设置已更新: {:?}", *settings);
+            
+            // 自动保存到文件
+            if let Err(e) = save_settings_to_file(&new_settings) {
+                println!("[proxy] ⚠️ 保存配置文件失败: {}", e);
+            }
         }
     }
 

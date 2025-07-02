@@ -191,12 +191,11 @@ export const useProxyStore = defineStore('proxy', () => {
       await invoke('set_proxy_type', { proxyType: backendTypeMap[type] });
       console.log('[ProxyStore] ✅ 设置代理类型成功:', type);
       
-      // 如果是禁用代理，清除所有代理地址
-      if (type === 'none') {
-        await clearAll();
-      }
+      // 禁用代理时不清除代理地址，只是禁用功能
+      // 这样用户切换回手动代理时，之前的配置仍然存在
+      
       // 如果是系统代理，获取并检查系统代理状态
-      else if (type === 'system') {
+      if (type === 'system') {
         const sysProxyInfo = await refreshSystemProxyInfo();
         if (!sysProxyInfo?.proxy_enabled) {
           // 如果系统代理未启用，设置为直连模式
@@ -384,39 +383,43 @@ export const useProxyStore = defineStore('proxy', () => {
     }
   }
 
-  // 应用到全部功能（增强版，包含代理测试）
+  // 应用到全部功能 - 简单的地址填充功能
   async function applyToAll(sourceAddress: string): Promise<boolean> {
     error.value = null;
     
     try {
+      // 基础格式验证
       const validationResult = validateProxyAddress(sourceAddress);
       if (!validationResult.valid) {
         error.value = validationResult.message;
         return false;
       }
 
-      const formattedAddress = validationResult.formatted;
+      // 直接使用用户输入的地址，保持原始格式
+      const trimmedAddress = sourceAddress.trim();
       
-      // 先测试代理连接
-      console.log('[ProxyStore] 测试代理连接...');
-      const testResult = await testProxyConnectivity(formattedAddress);
-      if (!testResult.proxy_available) {
-        error.value = `代理不可用: ${testResult.message}`;
-        return false;
+      console.log('[ProxyStore] 应用地址到全部代理输入框:', trimmedAddress);
+      
+      // 临时禁用watch，避免重复触发后端调用
+      const wasInitialized = isInitialized.value;
+      isInitialized.value = false;
+      
+      // 更新前端配置 - 直接填充到所有输入框
+      config.value.httpProxy = trimmedAddress;
+      config.value.httpsProxy = trimmedAddress;
+      config.value.socksProxy = trimmedAddress;
+      
+      // 恢复watch状态
+      isInitialized.value = wasInitialized;
+      
+      // 手动同步到后端（一次性更新，避免多次调用）
+      if (currentProxySettings.value) {
+        currentProxySettings.value.http_proxy = trimmedAddress || undefined;
+        currentProxySettings.value.https_proxy = trimmedAddress || undefined;
+        currentProxySettings.value.socks5_proxy = trimmedAddress || undefined;
+        await updateBackendProxySettings();
       }
       
-      // 提取host:port部分
-      const match = formattedAddress.match(/^(?:https?|socks5):\/\/(.*)$/);
-      const hostAndPort = match ? match[1] : formattedAddress;
-
-      // 为每种协议设置代理
-      await setHTTPProxy(`http://${hostAndPort}`);
-      await setHTTPSProxy(`https://${hostAndPort}`);
-      await setSOCKSProxy(`socks5://${hostAndPort}`);
-
-      // 打印当前代理状态
-      await getProxyStatus();
-
       console.log('[ProxyStore] ✅ 应用到全部代理成功');
       return true;
     } catch (e: any) {
@@ -462,6 +465,16 @@ export const useProxyStore = defineStore('proxy', () => {
         loadProxySettings()
       ]);
       
+      // 检查前端持久化状态与后端是否一致
+      if (currentProxySettings.value) {
+        console.log('[ProxyStore] 检查前端与后端设置同步...');
+        
+        // 以后端设置为准，同步到前端
+        syncFromBackendSettings(currentProxySettings.value);
+        
+        console.log('[ProxyStore] ✅ 前端与后端设置已同步');
+      }
+      
       isInitialized.value = true;
       console.log('[ProxyStore] ✅ 初始化完成');
     } catch (e) {
@@ -502,4 +515,7 @@ export const useProxyStore = defineStore('proxy', () => {
     getProxyStatus,
     refreshSystemProxyInfo
   };
+}, {
+  // 添加持久化配置 - 基本配置避免类型错误
+  persist: true
 }); 

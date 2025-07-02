@@ -99,7 +99,6 @@ import { useProxyStore } from '../store/useProxyStore';
 import ProxySettingsPopover from './ProxySettingsPopover.vue';
 // import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
-import eventBus from '../utils/eventBus';
 
 // 在系统默认浏览器中打开
 const openInDefaultBrowser = async () => {
@@ -139,7 +138,7 @@ const proxyStore = useProxyStore();
 
 // 刷新页面
 const refreshPage = () => {
-  eventBus.emit('refresh-iframe');
+  window.location.reload(); 
 };
  
 // 网络状态相关

@@ -376,54 +376,64 @@ const proxyType = computed({
   }
 });
 
+// 避免在应用到全部时产生重复的后端调用的标志
+const isApplyingToAll = ref(false);
+
 const httpProxy = computed({
   get: () => proxyStore.config.httpProxy,
   set: (value) => {
-    proxyStore.setHTTPProxy(value);
+    // 如果正在执行应用到全部操作，跳过单独的后端调用
+    if (!isApplyingToAll.value) {
+      proxyStore.setHTTPProxy(value);
+    }
   }
 });
 
 const httpsProxy = computed({
   get: () => proxyStore.config.httpsProxy,
   set: (value) => {
-    proxyStore.setHTTPSProxy(value);
+    // 如果正在执行应用到全部操作，跳过单独的后端调用
+    if (!isApplyingToAll.value) {
+      proxyStore.setHTTPSProxy(value);
+    }
   }
 });
 
 const socksProxy = computed({
   get: () => proxyStore.config.socksProxy,
   set: (value) => {
-    proxyStore.setSOCKSProxy(value);
+    // 如果正在执行应用到全部操作，跳过单独的后端调用
+    if (!isApplyingToAll.value) {
+      proxyStore.setSOCKSProxy(value);
+    }
   }
 });
 
 // noProxy 功能已移除，保留模板兼容性
 const noProxy = ref('');
 
-// 智能应用到全部
+// 智能应用到全部 - 只负责地址填充，不触发额外的后端调用
 async function applyToAll(sourceAddress: string, _sourceType?: 'http' | 'https' | 'socks') {
-  // 确保源地址有值
-  if (!sourceAddress) {
-    resultMessage.value = '源地址不能为空';
-    resultType.value = 'error';
-    clearResultAfterDelay(5000);
-    return;
-  }
-
-  const success = await proxyStore.applyToAll(sourceAddress);
-  if (success) {
-    resultMessage.value = '已应用到所有代理类型';
-    resultType.value = 'success';
+  try {
+    console.log('[ProxySettings] 开始应用到全部:', sourceAddress);
     
-    // 重新校验所有字段
-    debouncedValidateHttpProxy(proxyStore.config.httpProxy);
-    debouncedValidateHttpsProxy(proxyStore.config.httpsProxy);
-    debouncedValidateSocksProxy(proxyStore.config.socksProxy);
-  } else {
-    resultMessage.value = proxyStore.error || '应用失败';
-    resultType.value = 'error';
+    // 设置标志，避免计算属性触发重复的后端调用
+    isApplyingToAll.value = true;
+    
+    // 直接调用store的applyToAll方法，它会处理所有逻辑
+    const result = await proxyStore.applyToAll(sourceAddress);
+    
+    if (result) {
+      console.log('[ProxySettings] ✅ 应用到全部成功');
+    } else {
+      console.log('[ProxySettings] ❌ 应用到全部失败');
+    }
+  } catch (e) {
+    console.error('[ProxySettings] ❌ 应用到全部异常:', e);
+  } finally {
+    // 重置标志
+    isApplyingToAll.value = false;
   }
-  clearResultAfterDelay(5000);
 }
 
 // 清除所有代理
