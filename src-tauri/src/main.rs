@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 18:05:32
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-29 00:03:30
+ * @LastEditTime: 2025-07-02 20:14:27
  * @FilePath: \liuyao_desktop_tauri\src-tauri\src\main.rs
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -11,13 +11,13 @@
 
 use tauri::Manager;
 mod proxy_server;
+use once_cell::sync::Lazy;
 use proxy_server::{ProxyServer, ProxySettings, ProxyType};
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 mod read_system_proxy;
+use env_logger;
 use read_system_proxy::get_system_proxy_info;
 use serde::Serialize;
-use env_logger;
 
 // 全局代理服务器实例
 static PROXY_SERVER: Lazy<Mutex<Option<ProxyServer>>> = Lazy::new(|| Mutex::new(None));
@@ -32,7 +32,7 @@ fn get_local_proxy_port() -> u16 {
 #[tauri::command]
 fn update_proxy_settings(settings: ProxySettings) -> Result<(), String> {
     println!("[main] 收到代理设置更新请求: {:?}", settings);
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             server.update_proxy_settings(settings);
@@ -73,7 +73,7 @@ fn set_proxy_type(proxy_type: String) -> Result<(), String> {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
             settings.proxy_type = proxy_type.clone();
-            
+
             // 如果是禁用代理，清除所有代理地址并禁用代理
             if proxy_type == ProxyType::None {
                 settings.http_proxy = None;
@@ -81,7 +81,7 @@ fn set_proxy_type(proxy_type: String) -> Result<(), String> {
                 settings.socks5_proxy = None;
                 settings.enabled = false;
             }
-            
+
             server.update_proxy_settings(settings);
             Ok(())
         } else {
@@ -156,58 +156,70 @@ struct TestResult {
 #[tauri::command]
 async fn test_proxy_connectivity(proxy_url: String) -> Result<TestResult, String> {
     println!("[main] 开始测试代理连接: {}", proxy_url);
-    
+
+    use reqwest::Client;
     use std::time::Duration;
     use tokio::time::timeout;
-    use reqwest::Client;
-    
+
     // 处理直连模式
     if proxy_url == "direct://" {
         println!("[main] 直连模式测试");
-        
+
         // 创建不使用代理的客户端
-        let client = match Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build() {
+        let client = match Client::builder().timeout(Duration::from_secs(10)).build() {
             Ok(c) => c,
-            Err(e) => return Ok(TestResult {
-                proxy_available: true, // 直连模式下始终为 true
-                core333_accessible: false,
-                google_accessible: false,
-                message: format!("创建HTTP客户端失败: {}", e),
-            }),
+            Err(e) => {
+                return Ok(TestResult {
+                    proxy_available: true, // 直连模式下始终为 true
+                    core333_accessible: false,
+                    google_accessible: false,
+                    message: format!("创建HTTP客户端失败: {}", e),
+                })
+            }
         };
-        
+
         // 测试 core333.com
         let core333_result = match timeout(
             Duration::from_secs(10),
-            client.get("http://www.core333.com").send()
-        ).await {
+            client.get("http://www.core333.com").send(),
+        )
+        .await
+        {
             Ok(Ok(response)) => response.status().is_success(),
             _ => false,
         };
-        
+
         // 测试 google.com
         let google_result = match timeout(
             Duration::from_secs(10),
-            client.get("https://www.google.com").send()
-        ).await {
+            client.get("https://www.google.com").send(),
+        )
+        .await
+        {
             Ok(Ok(response)) => response.status().is_success(),
             _ => false,
         };
-        
+
         return Ok(TestResult {
             proxy_available: true, // 直连模式下始终为 true
             core333_accessible: core333_result,
             google_accessible: google_result,
             message: format!(
-                "直连测试结果：core333.com: {}，google.com: {}", 
-                if core333_result { "可访问" } else { "不可访问" },
-                if google_result { "可访问" } else { "不可访问" }
+                "直连测试结果：core333.com: {}，google.com: {}",
+                if core333_result {
+                    "可访问"
+                } else {
+                    "不可访问"
+                },
+                if google_result {
+                    "可访问"
+                } else {
+                    "不可访问"
+                }
             ),
         });
     }
-    
+
     // 解析代理地址
     let proxy_parts: Vec<&str> = proxy_url.split("://").collect();
     let (protocol, address) = if proxy_parts.len() == 2 {
@@ -215,7 +227,7 @@ async fn test_proxy_connectivity(proxy_url: String) -> Result<TestResult, String
     } else {
         ("http", proxy_url.as_str())
     };
-    
+
     let address_parts: Vec<&str> = address.split(':').collect();
     if address_parts.len() != 2 {
         return Ok(TestResult {
@@ -225,69 +237,91 @@ async fn test_proxy_connectivity(proxy_url: String) -> Result<TestResult, String
             message: "代理地址格式错误，应为 host:port".to_string(),
         });
     }
-    
+
     let host = address_parts[0];
     let port: u16 = match address_parts[1].parse() {
         Ok(p) => p,
-        Err(_) => return Ok(TestResult {
-            proxy_available: false,
-            core333_accessible: false,
-            google_accessible: false,
-            message: "端口号格式错误".to_string(),
-        }),
+        Err(_) => {
+            return Ok(TestResult {
+                proxy_available: false,
+                core333_accessible: false,
+                google_accessible: false,
+                message: "端口号格式错误".to_string(),
+            })
+        }
     };
-    
+
     println!("[main] 解析代理地址: {}://{}:{}", protocol, host, port);
-    
+
     // 测试TCP连接
     let socket_addr = format!("{}:{}", host, port);
-    match timeout(Duration::from_secs(5), tokio::net::TcpStream::connect(&socket_addr)).await {
+    match timeout(
+        Duration::from_secs(5),
+        tokio::net::TcpStream::connect(&socket_addr),
+    )
+    .await
+    {
         Ok(Ok(_)) => {
             println!("[main] ✅ TCP连接成功");
-            
+
             // 创建HTTP客户端
             let client = match Client::builder()
                 .proxy(reqwest::Proxy::all(&proxy_url).unwrap())
                 .timeout(Duration::from_secs(10))
-                .build() {
+                .build()
+            {
                 Ok(c) => c,
-                Err(e) => return Ok(TestResult {
-                    proxy_available: true,
-                    core333_accessible: false,
-                    google_accessible: false,
-                    message: format!("创建HTTP客户端失败: {}", e),
-                }),
+                Err(e) => {
+                    return Ok(TestResult {
+                        proxy_available: true,
+                        core333_accessible: false,
+                        google_accessible: false,
+                        message: format!("创建HTTP客户端失败: {}", e),
+                    })
+                }
             };
-            
+
             // 测试 core333.com
             let core333_result = match timeout(
                 Duration::from_secs(10),
-                client.get("http://www.core333.com").send()
-            ).await {
+                client.get("http://www.core333.com").send(),
+            )
+            .await
+            {
                 Ok(Ok(response)) => response.status().is_success(),
                 _ => false,
             };
-            
+
             // 测试 google.com
             let google_result = match timeout(
                 Duration::from_secs(10),
-                client.get("https://www.google.com").send()
-            ).await {
+                client.get("https://www.google.com").send(),
+            )
+            .await
+            {
                 Ok(Ok(response)) => response.status().is_success(),
                 _ => false,
             };
-            
+
             Ok(TestResult {
                 proxy_available: true,
                 core333_accessible: core333_result,
                 google_accessible: google_result,
                 message: format!(
-                    "代理可用。core333.com: {}，google.com: {}", 
-                    if core333_result { "可访问" } else { "不可访问" },
-                    if google_result { "可访问" } else { "不可访问" }
+                    "代理可用。core333.com: {}，google.com: {}",
+                    if core333_result {
+                        "可访问"
+                    } else {
+                        "不可访问"
+                    },
+                    if google_result {
+                        "可访问"
+                    } else {
+                        "不可访问"
+                    }
                 ),
             })
-        },
+        }
         _ => Ok(TestResult {
             proxy_available: false,
             core333_accessible: false,
@@ -301,32 +335,32 @@ async fn test_proxy_connectivity(proxy_url: String) -> Result<TestResult, String
 #[tauri::command]
 fn apply_system_proxy() -> Result<(), String> {
     println!("[main] 开始应用系统代理设置");
-    
+
     let system_proxy = get_system_proxy_info();
     println!("[main] 获取到系统代理信息: {:?}", system_proxy);
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
             settings.proxy_type = ProxyType::System;
-            
+
             if system_proxy.proxy_enabled {
                 // 系统代理已启用，应用系统代理设置
                 if !system_proxy.http_proxy.is_empty() {
                     settings.http_proxy = Some(system_proxy.http_proxy.clone());
                     println!("[main] 应用系统HTTP代理: {}", system_proxy.http_proxy);
                 }
-                
+
                 if !system_proxy.https_proxy.is_empty() {
                     settings.https_proxy = Some(system_proxy.https_proxy.clone());
                     println!("[main] 应用系统HTTPS代理: {}", system_proxy.https_proxy);
                 }
-                
+
                 if !system_proxy.socks_proxy.is_empty() {
                     settings.socks5_proxy = Some(system_proxy.socks_proxy.clone());
                     println!("[main] 应用系统SOCKS代理: {}", system_proxy.socks_proxy);
                 }
-                
+
                 settings.enabled = true;
                 println!("[main] ✅ 系统代理设置已应用: {:?}", settings);
             } else {
@@ -337,7 +371,7 @@ fn apply_system_proxy() -> Result<(), String> {
                 settings.enabled = false;
                 println!("[main] 系统代理未启用，设置为系统代理模式但暂不启用");
             }
-            
+
             server.update_proxy_settings(settings.clone());
             Ok(())
         } else {
@@ -393,7 +427,7 @@ fn get_direct_domains() -> Result<Vec<String>, String> {
 #[tauri::command]
 fn set_direct_domains(domains: Vec<String>) -> Result<(), String> {
     println!("[main] 设置直连域名列表: {:?}", domains);
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
@@ -415,16 +449,20 @@ fn add_direct_domain(domain: String) -> Result<(), String> {
     if domain.trim().is_empty() {
         return Err("域名不能为空".to_string());
     }
-    
+
     let clean_domain = domain.trim().to_lowercase();
     println!("[main] 添加直连域名: {}", clean_domain);
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
-            
+
             // 检查是否已存在
-            if !settings.direct_domains.iter().any(|d| d.to_lowercase() == clean_domain) {
+            if !settings
+                .direct_domains
+                .iter()
+                .any(|d| d.to_lowercase() == clean_domain)
+            {
                 settings.direct_domains.push(clean_domain.clone());
                 server.update_proxy_settings(settings);
                 println!("[main] ✅ 已添加直连域名: {}", clean_domain);
@@ -445,14 +483,16 @@ fn add_direct_domain(domain: String) -> Result<(), String> {
 fn remove_direct_domain(domain: String) -> Result<(), String> {
     let clean_domain = domain.trim().to_lowercase();
     println!("[main] 移除直连域名: {}", clean_domain);
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
-            
+
             let original_len = settings.direct_domains.len();
-            settings.direct_domains.retain(|d| d.to_lowercase() != clean_domain);
-            
+            settings
+                .direct_domains
+                .retain(|d| d.to_lowercase() != clean_domain);
+
             if settings.direct_domains.len() < original_len {
                 server.update_proxy_settings(settings);
                 println!("[main] ✅ 已移除直连域名: {}", clean_domain);
@@ -471,13 +511,13 @@ fn remove_direct_domain(domain: String) -> Result<(), String> {
 #[tauri::command]
 fn apply_manual_proxy() -> Result<(), String> {
     println!("[main] 开始应用手动代理设置");
-    
+
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let mut settings = server.get_proxy_settings();
             settings.proxy_type = ProxyType::Manual;
-            settings.enabled = true;  // 启用代理
-            
+            settings.enabled = true; // 启用代理
+
             // 应用设置
             server.update_proxy_settings(settings.clone());
             println!("[main] ✅ 手动代理设置已应用: {:?}", settings);
@@ -495,13 +535,13 @@ pub fn run() {
     // 设置日志级别
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
-    
+
     // 预设代理环境变量（使用默认端口8080）
     // 如果8080被占用，代理服务器会自动切换到其他端口
     std::env::set_var("HTTP_PROXY", "http://127.0.0.1:8080");
     std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:8080");
     println!("🔧 预设WebView代理环境变量: HTTP_PROXY=http://127.0.0.1:8080");
-    
+
     // 使用 Result 来处理错误
     if let Err(e) = run_app() {
         eprintln!("应用程序运行失败: {}", e);
@@ -511,29 +551,12 @@ pub fn run() {
 
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            // 当用户尝试启动第二个实例时的处理逻辑
-            println!("✨ 检测到应用已运行，聚焦到现有窗口");
-            
-            // 获取主窗口
             if let Some(window) = app.get_webview_window("main") {
-                // 显示并聚焦窗口
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-                let _ = window.center();
-                
-                // 暂时置顶提醒用户
-                let _ = window.set_always_on_top(true);
-                println!("✅ 已聚焦到现有应用窗口");
-                
-                // 2秒后取消置顶
-                let window_clone = window.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    let _ = window_clone.set_always_on_top(false);
-                });
+                window.show().unwrap();
+                window.set_focus().unwrap();
             }
         }))
         .invoke_handler(tauri::generate_handler![
@@ -558,50 +581,19 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             remove_direct_domain
         ])
         .setup(|app| {
-            println!("🚀 应用启动中... (单例模式已启用)");
-            
-            // 在setup中启动本地代理服务器，自动检测端口
-            let proxy = ProxyServer::start_auto_port(8080, 8099)
-                .ok_or("未能找到可用端口，代理服务器启动失败")?;
-            
-            println!("本地代理服务器已启动，端口: {}", proxy.port);
-            *LOCAL_PROXY_PORT.lock().unwrap() = proxy.port;
-            
-            // 保存代理服务器实例到全局变量
-            *PROXY_SERVER.lock().unwrap() = Some(proxy);
-            
-            let proxy_port = *LOCAL_PROXY_PORT.lock().unwrap();
-            
-            // 设置 WebView 代理环境变量
-            std::env::set_var("HTTP_PROXY", format!("http://127.0.0.1:{}", proxy_port));
-            std::env::set_var("HTTPS_PROXY", format!("http://127.0.0.1:{}", proxy_port));
-            println!("✅ WebView代理环境变量已设置: HTTP_PROXY=http://127.0.0.1:{}", proxy_port);
-            
+            // 启动代理服务器
+            let proxy_port = 8080;
+            let proxy_server = proxy_server::ProxyServer::start_auto_port(proxy_port, proxy_port + 100)
+                .expect("Failed to start proxy server");
+            println!("代理服务器启动在端口: {}", proxy_server.port);
+
             // 获取主窗口并确保它显示
             if let Some(window) = app.get_webview_window("main") {
-                // 强制显示窗口
+                // 只确保窗口显示和获得焦点，不强制改变位置和大小
                 window.show()?;
-                window.unminimize()?;
                 window.set_focus()?;
                 
-                // 居中窗口
-                window.center()?;
-                
-                // 设置窗口置顶（暂时）
-                window.set_always_on_top(true)?;
-                
-                println!("✅ 主窗口已强制显示、置顶、居中并获得焦点");
-                
-                // 2秒后取消置顶
-                let window_clone = window.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    if let Err(e) = window_clone.set_always_on_top(false) {
-                        eprintln!("取消窗口置顶失败: {}", e);
-                    }
-                    println!("窗口置顶已取消");
-                });
-                
+                println!("✅ 主窗口已显示并获得焦点");
                 println!("WebView已配置为使用代理: 127.0.0.1:{}", proxy_port);
             }
             Ok(())
@@ -611,5 +603,33 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    run();
+    tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                window.show().unwrap();
+                window.set_focus().unwrap();
+            }
+        }))
+        .setup(|app| {
+            // 启动代理服务器
+            let proxy_port = 8080;
+            let proxy_server = proxy_server::ProxyServer::start_auto_port(proxy_port, proxy_port + 100)
+                .expect("Failed to start proxy server");
+            println!("代理服务器启动在端口: {}", proxy_server.port);
+
+            // 获取主窗口并确保它显示
+            if let Some(window) = app.get_webview_window("main") {
+                // 只确保窗口显示和获得焦点，不强制改变位置和大小
+                window.show()?;
+                window.set_focus()?;
+                
+                println!("✅ 主窗口已显示并获得焦点");
+                println!("WebView已配置为使用代理: 127.0.0.1:{}", proxy_port);
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

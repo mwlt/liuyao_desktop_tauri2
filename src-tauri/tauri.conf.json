@@ -11,14 +11,15 @@
   "app": {
     "windows": [{
       "title": "六爻排盘与研究 v2.6.10",
-      "width": 1600,
-      "height": 1200,
-      "minWidth": 1200,
-      "minHeight": 900,
+      "width": 1280,
+      "height": 800,
+      "minWidth": 1000,
+      "minHeight": 700,
       "label": "main",   
       "resizable": true,
       "theme": "Light",
-      "proxyUrl": "http://127.0.0.1:8080"
+      "proxyUrl": "http://127.0.0.1:8080",
+      "visible": false
     }],
     "security": {
       "csp": null
@@ -37,18 +38,22 @@
     "windows": {
       "wix": {
         "language": "zh-CN"
+  
       },
       "webviewInstallMode": {
-        "type": "offlineInstaller"
+        "type": "embedBootstrapper"
       },
       "nsis": {
         "installMode": "perMachine",
         "languages": ["SimpChinese"],
-        "displayLanguageSelector": true
+        "displayLanguageSelector": true,
+         "installerIcon": "src-tauri/icons/installer.ico"
+
       },
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com"
+        
     },
     "macOS": {
       "frameworks": [],

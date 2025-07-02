@@ -37,3 +37,6 @@ env_logger = "0.10"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52.0"
 
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-window-state = "2"
+
