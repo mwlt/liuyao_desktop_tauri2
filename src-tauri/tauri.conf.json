@@ -38,7 +38,6 @@
     "windows": {
       "wix": {
         "language": "zh-CN"
-  
       },
       "webviewInstallMode": {
         "type": "embedBootstrapper"
@@ -47,13 +46,11 @@
         "installMode": "perMachine",
         "languages": ["SimpChinese"],
         "displayLanguageSelector": true,
-         "installerIcon": "src-tauri/icons/installer.ico"
-
+        "installerIcon": "icons/icon.ico"
       },
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com"
-        
     },
     "macOS": {
       "frameworks": [],

@@ -1,44 +1,72 @@
 ﻿# 设置环境变量以构建便携版
 $env:TAURI_BUNDLE_PORTABLE = "true"
 
-# 获取当前目录
+# 获取项目根目录
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $scriptDir/..
+$projectRoot = (Get-Item $scriptDir).Parent.Parent.FullName
+$tauriDir = Join-Path $projectRoot "src-tauri"
+
+Write-Host "📌 项目根目录: $projectRoot"
+Write-Host "📌 Tauri 目录: $tauriDir"
 
 # 获取版本号
-$version = (Get-Content -Raw -Path "tauri.conf.json" | ConvertFrom-Json).version
+$tauriConfigPath = Join-Path $tauriDir "tauri.conf.json"
+$version = (Get-Content -Raw -Path $tauriConfigPath | ConvertFrom-Json).version
+Write-Host "📌 当前版本: $version"
 
 # 清理之前的构建
 Write-Host "🧹 清理之前的构建..."
-Remove-Item -Path "target/release" -Recurse -ErrorAction SilentlyContinue
-Remove-Item -Path "target/portable" -Recurse -ErrorAction SilentlyContinue
+Remove-Item -Path (Join-Path $tauriDir "target/release") -Recurse -ErrorAction SilentlyContinue
+Remove-Item -Path (Join-Path $tauriDir "target/portable") -Recurse -ErrorAction SilentlyContinue
 
 # 构建前端
 Write-Host "🏗️ 构建前端..."
-Set-Location ..
+Set-Location $projectRoot
+Write-Host "📌 当前目录: $(Get-Location)"
 pnpm build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ 前端构建失败"
     exit 1
 }
 
-# 使用 Tauri 构建（而不是 cargo build）
+# 使用 Tauri 构建
 Write-Host "🏗️ 使用 Tauri 构建应用..."
-Set-Location src-tauri
+Set-Location $tauriDir
+Write-Host "📌 当前目录: $(Get-Location)"
+
+# 确保目标目录存在
+$targetDir = Join-Path $tauriDir "target"
+if (-not (Test-Path $targetDir)) {
+    New-Item -Path $targetDir -ItemType Directory -Force
+    Write-Host "📁 创建目标目录: $targetDir"
+}
+
 cargo tauri build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Tauri 构建失败"
+    Write-Host "📋 检查日志文件..."
+    $buildLog = Join-Path $targetDir "debug/build.log"
+    if (Test-Path $buildLog) {
+        Write-Host "📝 构建日志内容:"
+        Get-Content $buildLog | ForEach-Object { Write-Host "   $_" }
+    }
     exit 1
 }
 
 # 创建便携版目录
-$portableDir = "target/portable/liuyao-desktop-portable-v$version"
+$portableDir = Join-Path $tauriDir "target/portable/liuyao-desktop-portable-v$version"
 Write-Host "📦 创建便携版目录: $portableDir"
 New-Item -Path $portableDir -ItemType Directory -Force
 
-# 复制 Tauri 构建的可执行文件
-Write-Host "📝 复制文件..."
-Copy-Item "target/release/liuyao_desktop_tauri.exe" -Destination "$portableDir/"
+# 复制构建的可执行文件
+$exePath = Join-Path $tauriDir "target/release/liuyao_desktop_tauri.exe"
+Write-Host "📝 复制可执行文件: $exePath"
+if (Test-Path $exePath) {
+    Copy-Item $exePath -Destination $portableDir/
+} else {
+    Write-Host "❌ 错误：找不到可执行文件: $exePath"
+    exit 1
+}
 
 # 注意：icons 文件夹已嵌入到 exe 中，无需复制
 
@@ -63,7 +91,7 @@ $readmeContent | Out-File -FilePath "$portableDir/说明.txt" -Encoding utf8
 
 # 创建ZIP包
 Write-Host "📦 创建ZIP包..."
-$zipPath = "target/portable/liuyao-desktop-portable-v$version.zip"
+$zipPath = Join-Path $tauriDir "target/portable/liuyao-desktop-portable-v$version.zip"
 Compress-Archive -Path $portableDir -DestinationPath $zipPath -Force
 
 Write-Host "✅ 便携版构建完成！"
