@@ -153,10 +153,6 @@
           <span class="proxy-value">{{ systemProxyInfo.https_proxy || '未设置' }}</span>
         </div>
         <div class="proxy-info-item">
-          <span class="proxy-label">SOCKS代理:</span>
-          <span class="proxy-value">{{ systemProxyInfo.socks_proxy || '未设置' }}</span>
-        </div>
-        <div class="proxy-info-item">
           <span class="proxy-label">FTP代理:</span>
           <span class="proxy-value">{{ systemProxyInfo.ftp_proxy || '未设置' }}</span>
         </div>

@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-25 18:05:32
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-07-02 06:39:23
+ * @LastEditTime: 2025-07-02 13:21:23
  * @FilePath: \liuyao_desktop_tauri\README.md
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 -->
@@ -81,6 +81,39 @@ const targetUrl = ref('https://your-new-website.com');
 1. 禁用代理（默认）：直接访问，不使用任何代理
 2. 系统代理：跟随系统代理设置
 3. 手动代理：支持配置 HTTP、HTTPS、SOCKS5 代理
+
+## 常见问题说明
+
+### Q: 为什么刷新按钮只能让 iframe 回到初始页面？
+
+**答：**
+
+由于浏览器的安全策略（同源策略），如果你在应用中嵌入了一个跨域的网页（比如用 iframe 加载了 www.core.com），主页面是无法获取 iframe 当前正在访问的具体页面地址的，也无法直接让 iframe 刷新"当前页面"。
+
+所以，当你点击刷新按钮时，只能通过重新设置 iframe 的 `src` 属性来刷新页面，这样会让 iframe 回到最初绑定的首页，而不是你在 iframe 内部已经跳转到的子页面。这是所有现代浏览器的通用安全限制，不是程序bug。
+
+### Q: 有没有办法让 iframe 刷新当前页面？
+
+**答：**
+
+只有在你能控制 iframe 加载的网页代码时，才可以通过 postMessage 实现：
+
+1. 主页面通过 JS 发送消息给 iframe：
+   ```js
+   iframe.contentWindow.postMessage('reload', '*');
+   ```
+2. iframe 页面监听消息并执行刷新（需要你能修改iframe页面的JS）：
+   ```js
+   window.addEventListener('message', function(event) {
+     if (event.data === 'reload') {
+       location.reload();
+     }
+   });
+   ```
+
+这样，点击刷新按钮时，iframe 会刷新"当前正在访问的页面"。
+
+> 如果 iframe 加载的是第三方网站（你无法修改其代码），则无法实现刷新当前页面，只能回到初始首页。
 
 ## 问题反馈
 

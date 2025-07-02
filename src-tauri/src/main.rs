@@ -354,16 +354,112 @@ fn get_proxy_status() -> Result<String, String> {
     if let Ok(proxy_server) = PROXY_SERVER.lock() {
         if let Some(server) = proxy_server.as_ref() {
             let settings = server.get_proxy_settings();
+            let direct_domains = settings.direct_domains.join(", ");
             let status = format!(
-                "代理类型: {:?}, HTTP: {:?}, HTTPS: {:?}, SOCKS5: {:?}, 启用: {}",
+                "代理类型: {:?}, HTTP: {:?}, HTTPS: {:?}, SOCKS5: {:?}, 启用: {}, 直连域名: [{}]",
                 settings.proxy_type,
                 settings.http_proxy,
                 settings.https_proxy,
                 settings.socks5_proxy,
-                settings.enabled
+                settings.enabled,
+                direct_domains
             );
             println!("[main] 当前代理状态: {}", status);
             Ok(status)
+        } else {
+            Err("代理服务器未启动".to_string())
+        }
+    } else {
+        Err("无法获取代理服务器锁".to_string())
+    }
+}
+
+// 新增：获取直连域名列表
+#[tauri::command]
+fn get_direct_domains() -> Result<Vec<String>, String> {
+    if let Ok(proxy_server) = PROXY_SERVER.lock() {
+        if let Some(server) = proxy_server.as_ref() {
+            let settings = server.get_proxy_settings();
+            Ok(settings.direct_domains)
+        } else {
+            Err("代理服务器未启动".to_string())
+        }
+    } else {
+        Err("无法获取代理服务器锁".to_string())
+    }
+}
+
+// 新增：设置直连域名列表
+#[tauri::command]
+fn set_direct_domains(domains: Vec<String>) -> Result<(), String> {
+    println!("[main] 设置直连域名列表: {:?}", domains);
+    
+    if let Ok(proxy_server) = PROXY_SERVER.lock() {
+        if let Some(server) = proxy_server.as_ref() {
+            let mut settings = server.get_proxy_settings();
+            settings.direct_domains = domains;
+            server.update_proxy_settings(settings);
+            println!("[main] ✅ 直连域名列表已更新");
+            Ok(())
+        } else {
+            Err("代理服务器未启动".to_string())
+        }
+    } else {
+        Err("无法获取代理服务器锁".to_string())
+    }
+}
+
+// 新增：添加直连域名
+#[tauri::command]
+fn add_direct_domain(domain: String) -> Result<(), String> {
+    if domain.trim().is_empty() {
+        return Err("域名不能为空".to_string());
+    }
+    
+    let clean_domain = domain.trim().to_lowercase();
+    println!("[main] 添加直连域名: {}", clean_domain);
+    
+    if let Ok(proxy_server) = PROXY_SERVER.lock() {
+        if let Some(server) = proxy_server.as_ref() {
+            let mut settings = server.get_proxy_settings();
+            
+            // 检查是否已存在
+            if !settings.direct_domains.iter().any(|d| d.to_lowercase() == clean_domain) {
+                settings.direct_domains.push(clean_domain.clone());
+                server.update_proxy_settings(settings);
+                println!("[main] ✅ 已添加直连域名: {}", clean_domain);
+                Ok(())
+            } else {
+                Err(format!("域名 {} 已存在于直连列表中", clean_domain))
+            }
+        } else {
+            Err("代理服务器未启动".to_string())
+        }
+    } else {
+        Err("无法获取代理服务器锁".to_string())
+    }
+}
+
+// 新增：移除直连域名
+#[tauri::command]
+fn remove_direct_domain(domain: String) -> Result<(), String> {
+    let clean_domain = domain.trim().to_lowercase();
+    println!("[main] 移除直连域名: {}", clean_domain);
+    
+    if let Ok(proxy_server) = PROXY_SERVER.lock() {
+        if let Some(server) = proxy_server.as_ref() {
+            let mut settings = server.get_proxy_settings();
+            
+            let original_len = settings.direct_domains.len();
+            settings.direct_domains.retain(|d| d.to_lowercase() != clean_domain);
+            
+            if settings.direct_domains.len() < original_len {
+                server.update_proxy_settings(settings);
+                println!("[main] ✅ 已移除直连域名: {}", clean_domain);
+                Ok(())
+            } else {
+                Err(format!("域名 {} 不存在于直连列表中", clean_domain))
+            }
         } else {
             Err("代理服务器未启动".to_string())
         }
@@ -416,6 +512,30 @@ pub fn run() {
 fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // 当用户尝试启动第二个实例时的处理逻辑
+            println!("✨ 检测到应用已运行，聚焦到现有窗口");
+            
+            // 获取主窗口
+            if let Some(window) = app.get_webview_window("main") {
+                // 显示并聚焦窗口
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+                let _ = window.center();
+                
+                // 暂时置顶提醒用户
+                let _ = window.set_always_on_top(true);
+                println!("✅ 已聚焦到现有应用窗口");
+                
+                // 2秒后取消置顶
+                let window_clone = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let _ = window_clone.set_always_on_top(false);
+                });
+            }
+        }))
         .invoke_handler(tauri::generate_handler![
             get_system_proxy_info,
             get_local_proxy_port,
@@ -430,9 +550,16 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             test_proxy_connectivity,
             apply_system_proxy,
             apply_manual_proxy,
-            get_proxy_status
+            get_proxy_status,
+            // 直连域名管理命令
+            get_direct_domains,
+            set_direct_domains,
+            add_direct_domain,
+            remove_direct_domain
         ])
         .setup(|app| {
+            println!("🚀 应用启动中... (单例模式已启用)");
+            
             // 在setup中启动本地代理服务器，自动检测端口
             let proxy = ProxyServer::start_auto_port(8080, 8099)
                 .ok_or("未能找到可用端口，代理服务器启动失败")?;

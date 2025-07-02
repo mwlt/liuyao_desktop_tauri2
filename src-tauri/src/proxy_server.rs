@@ -2,7 +2,7 @@
  * @Author: mwlt_sanodia mwlt@163.com
  * @Date: 2025-06-26 00:11:01
  * @LastEditors: mwlt_sanodia mwlt@163.com
- * @LastEditTime: 2025-06-29 04:10:27
+ * @LastEditTime: 2025-07-02 12:59:32
  * @FilePath: \liuyao_desktop_tauri\src-tauri\src\proxy_server.rs
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 const BUFFER_SIZE: usize = 16 * 1024; // 16KB buffer，对大多数HTTP请求足够
 const WS_BUFFER_SIZE: usize = 32 * 1024; // 32KB for WebSocket，为WebSocket连接提供更大缓冲区
-const TIMEOUT: u64 = 60; // 60秒超时
+const TIMEOUT: u64 = 10; // 60秒超时
 
 // 新增：代理配置结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +28,7 @@ pub struct ProxySettings {
     pub username: Option<String>,
     pub password: Option<String>,
     pub enabled: bool,
+    pub direct_domains: Vec<String>, // 新增：直连域名列表
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -50,6 +51,10 @@ impl Default for ProxySettings {
             username: None,
             password: None,
             enabled: true,
+            direct_domains: vec![
+            
+               
+            ],
         }
     }
 }
@@ -168,6 +173,63 @@ fn should_bypass_proxy(host: &str, config: &SystemProxyConfig) -> bool {
     false
 }
 
+// 智能分流：检查是否应该直连
+fn should_direct_connect(target: &str, settings: &ProxySettings) -> bool {
+    // 只在手动代理模式下检查 direct_domains
+    if settings.proxy_type != ProxyType::Manual {
+        // 只允许局域网/localhost 直连
+        let host = extract_host(target);
+        return is_local_address(&host);
+    }
+
+    // 手动代理模式下，才检查 direct_domains
+    let host = extract_host(target);
+    let host_lower = host.to_lowercase();
+
+    for domain in &settings.direct_domains {
+        let domain_lower = domain.to_lowercase();
+        if host_lower == domain_lower || host_lower.ends_with(&format!(".{}", domain_lower)) {
+            println!("[proxy] 手动代理直连命中 - 域名: {}, 匹配规则: {}", host_lower, domain);
+            return true;
+        }
+    }
+
+    // 局域网/localhost 也允许直连
+    is_local_address(&host_lower)
+}
+
+// 提取主机名的辅助函数
+fn extract_host(target: &str) -> String {
+    let host = if target.starts_with("http://") {
+        &target[7..]
+    } else if target.starts_with("https://") {
+        &target[8..]
+    } else {
+        target
+    };
+    host.split(':').next().unwrap_or(host).split('/').next().unwrap_or(host).to_string()
+}
+
+// 检查是否是局域网地址
+fn is_local_address(host: &str) -> bool {
+    if host.starts_with("192.168.") || 
+       host.starts_with("10.") || 
+       (host.starts_with("172.") && host.len() > 4) {
+        return true;
+    }
+    
+    // 检查 172.16.0.0/12 范围
+    if let Some(third_dot) = host.find('.').and_then(|i| host[i+1..].find('.')) {
+        if let Ok(second_octet) = host[4..4+third_dot].parse::<u8>() {
+            if host.starts_with("172.") && second_octet >= 16 && second_octet <= 31 {
+                return true;
+            }
+        }
+    }
+    
+    false
+}
+
 // 获取系统HTTP代理设置
 fn get_system_http_proxy() -> Option<String> {
     let config = get_system_proxy_config();
@@ -229,6 +291,11 @@ fn connect_with_proxy_settings(target: &str, settings: &ProxySettings) -> std::i
     // 防止循环代理：如果目标是本地代理端口，直接连接
     if target.contains("127.0.0.1:8080") || target.contains("localhost:8080") {
         println!("[proxy] 检测到循环代理，改为直连: {}", target);
+        return direct_connect(target);
+    }
+
+    // 智能分流：检查是否应该直连
+    if should_direct_connect(target, settings) {
         return direct_connect(target);
     }
 
@@ -741,8 +808,31 @@ fn handle_http_request(
         println!("[proxy] URL重写: {} -> {}", parts[1], url);
     }
     
-    if url.starts_with("http://") || url.starts_with("ws://") || url.starts_with("wss://") {
-        handle_absolute_url(client_stream, &url, request, is_websocket, settings)
+    if url.starts_with("http://") || url.starts_with("https://") || url.starts_with("ws://") || url.starts_with("wss://") {
+        // 处理双斜杠问题：//www.core333.com//attachment -> //www.core333.com/attachment
+        let clean_url = url.replace("//attachment", "/attachment")
+                          .replace("//static", "/static")
+                          .replace("//assets", "/assets")
+                          .replace("//uploads", "/uploads")
+                          .replace("//images", "/images")
+                          .replace("//css", "/css")
+                          .replace("//js", "/js");
+        
+        println!("[proxy] URL清理: {} -> {}", url, clean_url);
+        handle_absolute_url(client_stream, &clean_url, request, is_websocket, settings)
+    } else if url.starts_with("//") {
+        // 处理协议相对路径中的双斜杠问题
+        let clean_url = url.replace("//attachment", "/attachment")
+                          .replace("//static", "/static")
+                          .replace("//assets", "/assets")
+                          .replace("//uploads", "/uploads")
+                          .replace("//images", "/images")
+                          .replace("//css", "/css")
+                          .replace("//js", "/js");
+        
+        println!("[proxy] 协议相对路径URL清理: {} -> {}", url, clean_url);
+        // 处理协议相对路径（Protocol-relative URL）
+        handle_protocol_relative_url(client_stream, &clean_url, request, is_websocket, settings)
     } else if url.starts_with("/") {
         handle_relative_url(client_stream, &url, request, is_websocket)
     } else {
@@ -760,26 +850,66 @@ fn handle_absolute_url(
     is_websocket: bool,
     settings: &Arc<Mutex<ProxySettings>>
 ) -> std::io::Result<()> {
+    println!("[proxy] 处理绝对URL请求: {}", url);
+    
+    let is_https = url.starts_with("https://");
     let is_ws = url.starts_with("ws://");
     let is_wss = url.starts_with("wss://");
     let is_websocket = is_websocket || is_ws || is_wss;
     
-    let url_without_scheme = &url[if is_wss { 6 } else if is_ws { 5 } else { 7 }..];
+    let url_without_scheme = &url[if is_https { 8 } else if is_wss { 6 } else if is_ws { 5 } else { 7 }..];
     let host_end = url_without_scheme.find('/').unwrap_or(url_without_scheme.len());
     let host_port = &url_without_scheme[..host_end];
     
     let (host, port) = match host_port.find(':') {
         Some(idx) => {
             let host = &host_port[..idx];
-            let port = host_port[idx+1..].parse().unwrap_or(if is_wss { 443 } else if is_ws { 8000 } else { 80 });
+            let port = host_port[idx+1..].parse().unwrap_or(
+                if is_https || is_wss { 443 } 
+                else if is_ws { 8000 } 
+                else { 80 }
+            );
             (host, port)
         }
-        None => (host_port, if is_wss { 443 } else if is_ws { 8000 } else { 80 })
+        None => (host_port, if is_https || is_wss { 443 } else if is_ws { 8000 } else { 80 })
     };
     
     let target_addr = format!("{}:{}", host, port);
+    println!("[proxy] 目标地址: {}", target_addr);
+    
     let proxy_settings = settings.lock().unwrap().clone();
     
+    // 检查是否应该直连
+    if should_direct_connect(url, &proxy_settings) {
+        println!("[proxy] 使用直连方式访问: {}", url);
+        match direct_connect(&target_addr) {
+            Ok(mut target_stream) => {
+                let timeout = if is_websocket {
+                    Duration::from_secs(300)
+                } else {
+                    Duration::from_secs(TIMEOUT)
+                };
+                
+                let _ = target_stream.set_read_timeout(Some(timeout));
+                let _ = target_stream.set_write_timeout(Some(timeout));
+                
+                // 构建并发送修改后的请求
+                let modified_request = modify_request(request, url_without_scheme, host_end, is_websocket)?;
+                println!("[proxy] 发送修改后的请求: {}", modified_request.lines().next().unwrap_or(""));
+                target_stream.write_all(modified_request.as_bytes())?;
+                
+                // 转发响应
+                tunnel(client_stream.try_clone()?, target_stream);
+                Ok(())
+            }
+            Err(e) => {
+                println!("[proxy] 直连失败: {}", e);
+                client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
+                Err(e)
+            }
+        }
+    } else {
+        println!("[proxy] 使用代理方式访问: {}", url);
     match connect_with_proxy_settings(&target_addr, &proxy_settings) {
         Ok(mut target_stream) => {
             let timeout = if is_websocket {
@@ -793,6 +923,7 @@ fn handle_absolute_url(
             
             // 构建并发送修改后的请求
             let modified_request = modify_request(request, url_without_scheme, host_end, is_websocket)?;
+                println!("[proxy] 发送修改后的请求: {}", modified_request.lines().next().unwrap_or(""));
             target_stream.write_all(modified_request.as_bytes())?;
             
             // 转发响应
@@ -800,10 +931,83 @@ fn handle_absolute_url(
             Ok(())
         }
         Err(e) => {
-            println!("[proxy] 连接失败: {}", e);
+                println!("[proxy] 代理连接失败: {}", e);
             client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
             Err(e)
+            }
         }
+    }
+}
+
+// 处理协议相对路径URL请求（如 //www.core333.com/path）
+fn handle_protocol_relative_url(
+    client_stream: &mut TcpStream,
+    url: &str,
+    request: &str,
+    is_websocket: bool,
+    settings: &Arc<Mutex<ProxySettings>>
+) -> std::io::Result<()> {
+    // 协议相对路径以 "//" 开头，需要根据当前请求的协议来决定使用 http 还是 https
+    // 默认使用 HTTPS（大多数现代网站都支持 HTTPS）
+    let mut use_https = true;
+    
+    // 检查请求头中的协议指示器
+    for line in request.lines() {
+        let line_lower = line.to_lowercase();
+        if line_lower.starts_with("x-forwarded-proto:") && line_lower.contains("http:") {
+            use_https = false;
+            break;
+        }
+        // 检查 Host 头，如果是 80 端口通常表示 HTTP
+        if line_lower.starts_with("host:") && line.contains(":80") {
+            use_https = false;
+            break;
+        }
+    }
+    
+    // 构建完整的URL
+    let protocol = if use_https { "https" } else { "http" };
+    let full_url = format!("{}{}", protocol, url);
+    
+    println!("[proxy] 协议相对路径 {} 转换为: {}", url, full_url);
+    
+    // 检查智能分流：从URL中提取主机名进行判断
+    let proxy_settings = settings.lock().unwrap().clone();
+    if should_direct_connect(&full_url, &proxy_settings) {
+        println!("[proxy] 协议相对路径智能分流 - 直连: {}", full_url);
+        // 直接连接处理
+        let is_https = full_url.starts_with("https://");
+        let url_without_scheme = &full_url[if is_https { 8 } else { 7 }..];
+        let host_end = url_without_scheme.find('/').unwrap_or(url_without_scheme.len());
+        let host_port = &url_without_scheme[..host_end];
+        
+        let (host, port) = match host_port.find(':') {
+            Some(idx) => {
+                let host = &host_port[..idx];
+                let port = host_port[idx+1..].parse().unwrap_or(if is_https { 443 } else { 80 });
+                (host, port)
+            }
+            None => (host_port, if is_https { 443 } else { 80 })
+        };
+        
+        let target_addr = format!("{}:{}", host, port);
+        
+        match direct_connect(&target_addr) {
+            Ok(mut target_stream) => {
+                let modified_request = modify_request(request, url_without_scheme, host_end, is_websocket)?;
+                target_stream.write_all(modified_request.as_bytes())?;
+                tunnel(client_stream.try_clone()?, target_stream);
+                Ok(())
+            }
+            Err(e) => {
+                println!("[proxy] 直连失败: {}", e);
+                client_stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")?;
+                Err(e)
+            }
+        }
+    } else {
+        // 使用现有的绝对URL处理函数（会通过代理）
+    handle_absolute_url(client_stream, &full_url, request, is_websocket, settings)
     }
 }
 
