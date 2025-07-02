@@ -45,7 +45,6 @@
         "installMode": "perMachine",
         "languages": ["SimpChinese"],
         "displayLanguageSelector": true,
-        "installerIcon": "src-tauri/icons/icon.ico"
       },
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
