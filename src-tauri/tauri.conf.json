@@ -44,7 +44,7 @@
       "nsis": {
         "installMode": "perMachine",
         "languages": ["SimpChinese"],
-        "displayLanguageSelector": true,
+        "displayLanguageSelector": true
       },
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
